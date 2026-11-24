@@ -1,4 +1,4 @@
-# JMP-28 Implementation Handoff & Test Results
+# JMP-28 Final Production-Runtime Compatibility & Implementation Handoff
 
 ## 1. Summary of Changes & Architecture
 
@@ -11,6 +11,7 @@ packages/contracts/
 ├── tsconfig.json
 ├── tsconfig.build.json
 ├── README.md
+├── dist/                # Emitted JS, d.ts, and maps
 └── src/
     ├── common/
     │   ├── identifiers.ts
@@ -34,12 +35,40 @@ packages/contracts/
 
 ---
 
-## 2. Dependency & Package Configuration
+## 2. Package Configuration & Production Export Strategy
 
-- **Zod Version**: `^3.24.2` (`3.24.2` resolved and pinned in `pnpm-lock.yaml`).
-- **Single Owner**: `@jmp/contracts` is the sole runtime owner of `zod`. Neither `@jmp/web` nor `@jmp/api` installs a redundant duplicate Zod dependency.
-- **Workspace Source Resolution**: Preserved `"exports": { ".": { "types": "./src/index.ts", "default": "./src/index.ts" } }` so Vite and Node/tsx continue to resolve TypeScript source seamlessly without intermediate build steps during development.
-- **Dedicated Build Pipeline**: Added `tsconfig.build.json` and package build script `"build": "tsc -p tsconfig.build.json"`, compiling source into `dist/` containing `.js`, `.js.map`, `.d.ts`, and `.d.ts.map` declaration maps.
+### Dual Resolution Configuration (`packages/contracts/package.json`):
+```json
+{
+  "name": "@jmp/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@jmp/config": "workspace:*"
+  }
+}
+```
+
+- **Production Node Runtime**: Standard Node.js (`node dist/server.js`) resolves `"default": "./dist/index.js"` and its emitted relative imports (e.g. `./common/identifiers.js`) from compiled JavaScript in `dist/`.
+- **Vite & Frontend Development**: Vite resolves `"development": "./src/index.ts"` (and `"types": "./src/index.ts"`), enabling hot module reloading without requiring intermediate package rebuilds during frontend feature development.
+- **TypeScript Compiler**: `tsc` resolves types directly via `"types": "./src/index.ts"`.
 
 ---
 
@@ -109,9 +138,45 @@ Both `@jmp/web` and `@jmp/api` consume the shared contracts via the workspace pa
 
 ---
 
-## 5. Verification Commands & Test Results
+## 5. Production-Runtime Verification & Live Execution
 
-All verification commands specified in Section 11 executed cleanly with 100% pass rates:
+### A. Direct Production Node Import Test:
+Command:
+```bash
+node -e "import('@jmp/contracts').then(({ jobSearchQuerySchema, API_VERSION }) => console.log('API_VERSION:', API_VERSION, 'parse:', jobSearchQuerySchema.parse({ page: 2 })))"
+```
+Output:
+```text
+API_VERSION: v1 parse: { page: 2, pageSize: 20 }
+```
+(Exit code 0 — pure Node without tsx or loaders).
+
+### B. Compiled API Production Startup & Live Endpoint Test:
+Command:
+```bash
+PORT=3005 pnpm --filter @jmp/api start
+curl -i http://localhost:3005/api/v1
+```
+Output:
+```text
+$ node dist/server.js
+{"level":30,"msg":"Database connection established successfully"}
+{"level":30,"port":3005,"msg":"Job Marketplace API listening on port 3005"}
+
+HTTP/1.1 200 OK
+X-Request-Id: 2908fffe-7363-4ec8-8b83-99a6541be8d1
+Content-Type: application/json; charset=utf-8
+Content-Length: 71
+
+{"data":{"service":"Job Marketplace API","version":"v1","status":"ok"}}
+```
+(Exit code 0 — compiled API runs with production package exports and returns HTTP 200).
+
+---
+
+## 6. Monorepo Verification Matrix
+
+All required verification commands executed cleanly with 100% pass rates:
 
 | Command | Status | Details |
 |---|---|---|
@@ -121,32 +186,9 @@ All verification commands specified in Section 11 executed cleanly with 100% pas
 | `pnpm --filter @jmp/contracts build` | **PASS** | `tsc -p tsconfig.build.json` emitted valid JS, declaration files (`.d.ts`), and maps to `dist/` |
 | `pnpm --filter @jmp/api typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
 | `pnpm --filter @jmp/api test` | **PASS** | 5 test suites, 29 tests passed (including `contracts.test.ts`) |
+| `pnpm --filter @jmp/api build` | **PASS** | `pnpm db:generate && tsc -p tsconfig.build.json` succeeded cleanly |
 | `pnpm --filter @jmp/web typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
 | `pnpm --filter @jmp/web test` | **PASS** | 4 test suites, 13 tests passed (including `contracts.test.ts`) |
+| `pnpm --filter @jmp/web build` | **PASS** | `tsc --noEmit && vite build` built client bundle in 75ms |
 | `pnpm workspace:check` | **PASS** | All 4 workspace packages resolve cleanly with no missing dependencies |
 | `pnpm check` | **PASS** | Full monorepo validation (lint, typecheck, test 100% green across all packages) |
-
----
-
-## 6. Project References & Deliberate Decisions
-
-- **Reference Document Locations**:
-  - `JMP_API_Standards_v1.0.pdf` (root directory)
-  - `JMP_Architecture_Design_v1.0.pdf` (root directory)
-  - `JMP_SRS_v1.0.pdf` (root directory)
-  - `JMP_ERD_v1.0.pdf` (root directory)
-- **Deliberate Decisions**:
-  - `skillId` Query Parsing: In Express queries, a single repeated parameter appears as a string, whereas multiple appear as an array. `jobSearchQuerySchema` accepts `publicIdSchema | publicIdSchema[]` in `z.input` and normalizes both to `string[]` in `z.output`.
-  - Coerced Number Types: Defined `pageQueryParamSchema` and `pageSizeQueryParamSchema` with `z.union([z.number(), z.string()]).pipe(...)` so raw query input types accurately accept both strings and numbers without TypeScript compiler errors.
-  - Forward-Compatible Problem Details: `problemDetailsSchema` is intentionally non-strict to permit forward-compatible server extensions.
-
----
-
-## 7. Out-of-Scope Confirmations
-
-In accordance with Section 10 of `JMP-28-instruction.md`:
-- No authentication/authorization schemas or endpoints were introduced (Sprint 2).
-- No global Express validation middleware or route handlers were added.
-- No OpenAPI document generation or `@asteasolutions/zod-to-openapi` was integrated.
-- No Prisma models, database migrations, or database infrastructure were modified.
-- No UI components or Redux/RTK Query endpoints were constructed.
