@@ -1,0 +1,70 @@
+import { describe, it, expect } from 'vitest';
+import {
+  jobSearchQuerySchema,
+  type JobSearchQueryInput,
+  type JobSearchQueryOutput,
+  type DataEnvelope,
+} from '@jmp/contracts';
+
+describe('@jmp/web -> @jmp/contracts integration', () => {
+  const sampleUuid = '550e8400-e29b-41d4-a716-446655440000';
+
+  it('parses valid browser search form state into strongly typed query DTO', () => {
+    // Browser form state typed with inferred JobSearchQueryInput without duplicate interfaces
+    const formState: JobSearchQueryInput = {
+      q: 'React Developer',
+      countryCode: 'et',
+      city: 'Addis Ababa',
+      categoryId: sampleUuid,
+      sort: 'publishedAt:desc',
+      page: 1,
+      pageSize: 20,
+    };
+
+    const parsed: JobSearchQueryOutput = jobSearchQuerySchema.parse(formState);
+
+    expect(parsed.q).toBe('React Developer');
+    expect(parsed.countryCode).toBe('ET');
+    expect(parsed.city).toBe('Addis Ababa');
+    expect(parsed.categoryId).toBe(sampleUuid);
+    expect(parsed.sort).toBe('publishedAt:desc');
+    expect(parsed.page).toBe(1);
+    expect(parsed.pageSize).toBe(20);
+  });
+
+  it('rejects invalid browser form inputs', () => {
+    // Exceeds max pageSize of 100
+    expect(() =>
+      jobSearchQuerySchema.parse({
+        pageSize: 150,
+      }),
+    ).toThrow();
+
+    // Invalid country code length
+    expect(() =>
+      jobSearchQuerySchema.parse({
+        countryCode: 'TOOLONG',
+      }),
+    ).toThrow();
+
+    // Malformed UUID
+    expect(() =>
+      jobSearchQuerySchema.parse({
+        categoryId: 'invalid-id',
+      }),
+    ).toThrow();
+  });
+
+  it('uses exported DataEnvelope type without declaring a duplicate interface', () => {
+    const searchResultPayload: DataEnvelope<JobSearchQueryOutput> = {
+      data: {
+        page: 1,
+        pageSize: 20,
+        q: 'Frontend Engineer',
+        countryCode: 'ET',
+      },
+    };
+
+    expect(searchResultPayload.data.countryCode).toBe('ET');
+  });
+});
