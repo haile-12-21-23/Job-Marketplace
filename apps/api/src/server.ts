@@ -1,6 +1,8 @@
+import 'dotenv/config';
 import http from 'node:http';
 import { createApp } from './app.js';
 import { logger } from './observability/logger.js';
+import { connectDatabase, disconnectDatabase } from './infrastructure/database/prisma.js';
 
 const PORT = Number(process.env['PORT'] ?? 3000);
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -10,9 +12,22 @@ const server = http.createServer(app);
 
 // ── Startup ──────────────────────────────────────────────────────────────────
 
-server.listen(PORT, () => {
-  logger.info({ port: PORT }, `Job Marketplace API listening on port ${PORT}`);
-});
+async function start(): Promise<void> {
+  try {
+    await connectDatabase();
+    logger.info('Database connection established successfully');
+
+    server.listen(PORT, () => {
+      logger.info({ port: PORT }, `Job Marketplace API listening on port ${PORT}`);
+    });
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : 'Unknown database connection error' },
+      'Failed to connect to database during startup — aborting',
+    );
+    process.exit(1);
+  }
+}
 
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
@@ -41,13 +56,22 @@ function shutdown(signal: string, exitCode = 0): void {
   // Allow the timeout to be garbage-collected if shutdown finishes first.
   if (forceExit.unref) forceExit.unref();
 
-  server.close((err) => {
+  server.close(async (err) => {
     if (err) {
       logger.error({ err }, 'Error closing HTTP server');
+    } else {
+      logger.info('HTTP server closed');
+    }
+
+    try {
+      await disconnectDatabase();
+      logger.info('Database connection closed — exiting cleanly');
+    } catch (dbErr) {
+      logger.error({ err: dbErr }, 'Error disconnecting database');
       process.exit(1);
     }
-    logger.info('HTTP server closed — exiting cleanly');
-    process.exit(exitCode);
+
+    process.exit(err ? 1 : exitCode);
   });
 }
 
@@ -66,3 +90,5 @@ process.on('uncaughtException', (err) => {
   logger.error({ err }, 'Uncaught exception — initiating shutdown');
   shutdown('uncaughtException', 1);
 });
+
+void start();
