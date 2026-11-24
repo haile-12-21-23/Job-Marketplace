@@ -15,7 +15,11 @@
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "workspace:check": "node scripts/check-workspace.mjs"
+    "workspace:check": "node scripts/check-workspace.mjs",
+    "docker:db:up": "docker compose --env-file .env.docker up -d postgres",
+    "docker:db:down": "docker compose --env-file .env.docker down",
+    "docker:db:logs": "docker compose --env-file .env.docker logs -f postgres",
+    "docker:db:status": "docker compose --env-file .env.docker ps"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

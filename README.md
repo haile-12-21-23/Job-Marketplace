@@ -33,15 +33,19 @@ Commit the generated `pnpm-lock.yaml`. CI and other developers should then use `
 
 ## Root commands
 
-| Command                | Purpose                                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `pnpm lint`            | Run lint scripts in all workspace packages that define one.                                   |
-| `pnpm typecheck`       | Run TypeScript checks in all workspace packages that define one.                              |
-| `pnpm test`            | Run tests in all workspace packages that define one.                                          |
-| `pnpm check`           | Run format check, lint, typecheck and tests in sequence.                                      |
-| `pnpm format`          | Format supported files with Prettier.                                                         |
-| `pnpm format:check`    | Check formatting without changing files.                                                      |
-| `pnpm workspace:check` | Validate workspace folders and internal `workspace:*` references without installing packages. |
+| Command                 | Purpose                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm lint`             | Run lint scripts in all workspace packages that define one.                                   |
+| `pnpm typecheck`        | Run TypeScript checks in all workspace packages that define one.                              |
+| `pnpm test`             | Run tests in all workspace packages that define one.                                          |
+| `pnpm check`            | Run format check, lint, typecheck and tests in sequence.                                      |
+| `pnpm format`           | Format supported files with Prettier.                                                         |
+| `pnpm format:check`     | Check formatting without changing files.                                                      |
+| `pnpm workspace:check`  | Validate workspace folders and internal `workspace:*` references without installing packages. |
+| `pnpm docker:db:up`     | Start local PostgreSQL 18.7 service in detached mode via Docker Compose.                      |
+| `pnpm docker:db:down`   | Stop local Docker Compose database service (preserves persistent volume).                     |
+| `pnpm docker:db:logs`   | Follow logs from the Docker Compose PostgreSQL service.                                       |
+| `pnpm docker:db:status` | Check container status and health of the Compose PostgreSQL service.                          |
 
 ## Workspace layout
 
@@ -71,6 +75,35 @@ This commit establishes the workspace, package names, root scripts and reusable 
 ## Toolchain baseline
 
 Tool versions are pinned in the root manifest for reproducible setup. The TypeScript compiler is pinned to the 6.0 line because the selected stable `typescript-eslint` release currently declares TypeScript support below 6.1. Upgrade that pair together when the lint toolchain officially supports the next TypeScript major.
+
+## Local Docker Database (PostgreSQL 18.7)
+
+The repository provides a Docker Compose definition (`compose.yaml`) for a dedicated local PostgreSQL 18.7 database service running on host port `5433` by default (avoiding conflicts with existing native PostgreSQL on port 5432):
+
+```bash
+# 1. Create your local Compose environment file
+cp .env.docker.example .env.docker
+
+# 2. Start PostgreSQL 18.7 in the background
+docker compose --env-file .env.docker up -d postgres
+# or via root convenience script:
+pnpm docker:db:up
+
+# 3. Check container status and health
+docker compose --env-file .env.docker ps
+# or:
+pnpm docker:db:status
+
+# 4. Stop service without deleting data
+docker compose --env-file .env.docker down
+# or:
+pnpm docker:db:down
+```
+
+> [!CAUTION]
+> **Data Persistence:** The database stores data in a named volume (`postgres_data`) mounted at `/var/lib/postgresql`.
+> `docker compose down` safely stops the container while **preserving** all database records and migrations.
+> **Never** use `docker compose down -v` during routine workflows as `-v` destroys the persistent volume.
 
 ## Run the project
 

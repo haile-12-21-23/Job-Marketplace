@@ -69,6 +69,29 @@ export async function connectDatabase(databaseUrl?: string): Promise<PrismaClien
 }
 
 /**
+ * Executes a bounded smoke query (SELECT 1) to verify database connectivity.
+ * Reuses the existing PrismaClient and connection pool singleton.
+ *
+ * @param timeoutMs Timeout in milliseconds (default: 5000ms).
+ */
+export async function checkDatabaseReadiness(timeoutMs = 5000): Promise<void> {
+  const client = getPrismaClient();
+
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('Database readiness check timed out'));
+    }, timeoutMs);
+  });
+
+  try {
+    await Promise.race([client.$queryRawUnsafe('SELECT 1'), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Gracefully disconnects Prisma client and terminates the PostgreSQL connection pool.
  * Safe to call multiple times (idempotent).
  */
