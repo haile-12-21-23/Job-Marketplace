@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
-/* Smooth scrolling and focus-visible polyfill for older browsers */
+@theme {
+  --color-brand-navy: #17324d;
+  --color-brand-blue: #2f6f95;
+  --color-brand-teal: #16847f;
+  --color-brand-accent: #e8f3f1;
+  --color-brand-soft: #f4f7fa;
+  --color-brand-line: #d4dee7;
+  --color-brand-ink: #1d3448;
+  --color-brand-muted: #657789;
+}
+
+/* Base resets & accessible focus indicators */
 :root {
   color-scheme: light;
 }
@@ -22,12 +33,14 @@ body {
     Oxygen,
     Ubuntu,
     sans-serif;
+  color: #1d3448;
+  background-color: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Ensure consistent focus rings across browsers */
+/* Accessible focus outlines */
 :focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #16847f;
   outline-offset: 2px;
 }

@@ -35,13 +35,13 @@ Commit the generated `pnpm-lock.yaml`. CI and other developers should then use `
 
 | Command                  | Purpose                                                                                         |
 | ------------------------ | ----------------------------------------------------------------------------------------------- |
-| `pnpm lint`            | Run lint scripts in all workspace packages that define one.                                     |
-| `pnpm typecheck`       | Run TypeScript checks in all workspace packages that define one.                                |
-| `pnpm test`            | Run tests in all workspace packages that define one.                                            |
-| `pnpm check`           | Run lint, typecheck and tests in sequence.                                                      |
-| `pnpm format`          | Format supported files with Prettier.                                                           |
-| `pnpm format:check`    | Check formatting without changing files.                                                        |
-| `pnpm workspace:check` | Validate workspace folders and internal `workspace:*` references without installing packages. |
+| `pnpm lint`              | Run lint scripts in all workspace packages that define one.                                     |
+| `pnpm typecheck`         | Run TypeScript checks in all workspace packages that define one.                                |
+| `pnpm test`              | Run tests in all workspace packages that define one.                                            |
+| `pnpm check`             | Run lint, typecheck and tests in sequence.                                                      |
+| `pnpm format`            | Format supported files with Prettier.                                                           |
+| `pnpm format:check`      | Check formatting without changing files.                                                        |
+| `pnpm workspace:check`  | Validate workspace folders and internal `workspace:*` references without installing packages. |
 
 ## Workspace layout
 
@@ -71,3 +71,22 @@ This commit establishes the workspace, package names, root scripts and reusable 
 ## Toolchain baseline
 
 Tool versions are pinned in the root manifest for reproducible setup. The TypeScript compiler is pinned to the 6.0 line because the selected stable `typescript-eslint` release currently declares TypeScript support below 6.1. Upgrade that pair together when the lint toolchain officially supports the next TypeScript major.
+
+## Run the project
+
+### Frontend
+
+```Shell
+pnpm --filter @jmp/web dev
+```
+
+### Backend
+
+```Shell
+pnpm --filter @jmp/api dev
+```
+
+## Expected local URLs
+
+  Frontend: <http://localhost:5173>
+ Backend: <http://localhost:3000>

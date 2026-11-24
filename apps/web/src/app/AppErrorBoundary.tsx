@@ -12,9 +12,9 @@ interface AppErrorBoundaryProps {
 /**
  * Global React error boundary.
  *
- * React error boundaries catch errors thrown during rendering, in lifecycle
- * methods, and in constructors of child components. They do NOT catch errors
- * in event handlers or asynchronous callbacks (use try/catch there instead).
+ * Catches errors thrown during rendering, in lifecycle methods, and in
+ * constructors of child components. Does NOT catch errors in asynchronous
+ * callbacks or event handlers (use try/catch there).
  */
 export class AppErrorBoundary extends React.Component<
   AppErrorBoundaryProps,
@@ -32,7 +32,6 @@ export class AppErrorBoundary extends React.Component<
   }
 
   override componentDidCatch(error: unknown, info: React.ErrorInfo): void {
-    // Log to the console in development; swap for a monitoring service in production.
     if (import.meta.env.DEV) {
       console.error('[AppErrorBoundary] Caught render error:', error, info);
     }
@@ -48,7 +47,7 @@ export class AppErrorBoundary extends React.Component<
         <div
           role="alert"
           aria-live="assertive"
-          className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-50 px-4 py-16 text-center"
+          className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#f4f7fa] px-4 py-16 text-center text-[#1d3448]"
         >
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
             <svg
@@ -65,27 +64,29 @@ export class AppErrorBoundary extends React.Component<
               />
             </svg>
           </div>
+
           <div className="max-w-md space-y-2">
-            <h1 className="text-2xl font-semibold text-slate-900">
+            <h1 className="text-2xl font-bold text-[#17324d]">
               Something went wrong
             </h1>
-            <p className="text-slate-600">
+            <p className="text-sm leading-relaxed text-[#657789]">
               The page encountered an unexpected error. You can try refreshing
               or clicking the button below to recover.
             </p>
           </div>
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={this.handleReset}
-              className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-lg bg-[#16847f] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#126761] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16847f]"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-lg border border-[#d4dee7] bg-white px-5 py-2.5 text-sm font-semibold text-[#17324d] shadow-xs hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#17324d]"
             >
               Reload page
             </button>
