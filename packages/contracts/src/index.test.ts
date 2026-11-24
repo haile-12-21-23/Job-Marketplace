@@ -71,7 +71,10 @@ describe('@jmp/contracts public barrel exports', () => {
     const publicId: PublicId = '550e8400-e29b-41d4-a716-446655440000';
     const single: DataEnvelope<typeof output> = { data: output };
     const meta: PaginationMeta = { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 };
-    const paginated: PaginatedEnvelope<typeof output> = { data: [output], meta: { pagination: meta } };
+    const paginated: PaginatedEnvelope<typeof output> = {
+      data: [output],
+      meta: { pagination: meta },
+    };
     const problem: ProblemDetails = {
       type: 'about:blank',
       title: 'Not Found',

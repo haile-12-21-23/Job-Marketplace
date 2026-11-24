@@ -1,10 +1,4 @@
 {
-    "cSpell.words": [
-        "hailemariamaddisu",
-        "nuxt",
-        "vercel"
-    ],
-    "emmet.extensionsPath": [
-        "javascriptreact "
-    ]
+  "cSpell.words": ["hailemariamaddisu", "nuxt", "vercel"],
+  "emmet.extensionsPath": ["javascriptreact "]
 }

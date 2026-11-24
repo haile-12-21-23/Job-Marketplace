@@ -51,10 +51,7 @@ export const errorHandler: ErrorRequestHandler = (
   // ── Unknown / programming errors ────────────────────────────────────────
   else {
     // Log with full error context server-side; never expose internals to clients.
-    logger.error(
-      { requestId: req.requestId, err },
-      'Unhandled error reached error handler',
-    );
+    logger.error({ requestId: req.requestId, err }, 'Unhandled error reached error handler');
   }
 
   const body: ProblemDetails = {
@@ -83,10 +80,8 @@ function isBodyParserError(err: unknown): err is BodyParserError {
     err !== null &&
     'type' in err &&
     typeof (err as Record<string, unknown>)['type'] === 'string' &&
-    (
-      (err as Record<string, unknown>)['type'] === 'entity.parse.failed' ||
-      (err as Record<string, unknown>)['type'] === 'entity.too.large'
-    )
+    ((err as Record<string, unknown>)['type'] === 'entity.parse.failed' ||
+      (err as Record<string, unknown>)['type'] === 'entity.too.large')
   );
 }
 

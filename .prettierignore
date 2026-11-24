@@ -1,0 +1,28 @@
+# Package manager lockfiles
+pnpm-lock.yaml
+
+# Dependencies and store
+node_modules/
+.pnpm-store/
+
+# Build and coverage artifacts
+dist/
+build/
+out/
+coverage/
+.vite/
+.turbo/
+.cache/
+.eslintcache
+
+# Generated Prisma Client
+apps/api/src/generated/
+
+# Reference assets and prototype documents
+*.pdf
+JMP_UI_Wireframes_v1.0.html
+
+# Environment files
+.env
+.env.*
+!.env.example

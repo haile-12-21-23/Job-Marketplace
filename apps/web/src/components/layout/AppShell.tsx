@@ -12,16 +12,14 @@ function DevErrorTrigger(): React.JSX.Element | null {
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).has('simulate-error')
   ) {
-    throw new Error(
-      'Simulated development render error for AppErrorBoundary verification.',
-    );
+    throw new Error('Simulated development render error for AppErrorBoundary verification.');
   }
   return null;
 }
 
 export default function AppShell(): React.JSX.Element {
   return (
-    <div className="flex min-h-screen flex-col bg-white text-[#1d3448]">
+    <div className="flex min-h-screen flex-col bg-white text-brand-ink">
       <DevErrorTrigger />
 
       {/* ── Skip to Main Content Link ────────────────────────── */}
@@ -33,28 +31,25 @@ export default function AppShell(): React.JSX.Element {
       </a>
 
       {/* ── Header / Appbar ──────────────────────────────────── */}
-      <header className="border-b border-[#d4dee7] bg-white">
+      <header className="border-b border-brand-line bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
           {/* Brand Wordmark matching JMP UX Baseline */}
           <a
             href="/"
             aria-label="Job Marketplace home"
-            className="flex items-center gap-2 rounded-md text-xl font-extrabold tracking-tight text-[#17324d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#16847f]"
+            className="flex items-center gap-2 rounded-md text-xl font-extrabold tracking-tight text-brand-navy focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-brand-teal"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#17324d] text-sm font-bold text-white shadow-xs">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-navy text-sm font-bold text-white shadow-xs">
               <span>j</span>
               <span className="text-[#78c9be]">m</span>
             </span>
             <span>
-              job<i className="not-italic text-[#16847f]">market</i>
+              job<i className="not-italic text-brand-teal">market</i>
             </span>
           </a>
 
           {/* Desktop Navigation links — explicitly non-functional placeholders for JMP-25 */}
-          <nav
-            aria-label="Primary navigation"
-            className="hidden items-center gap-1 md:flex"
-          >
+          <nav aria-label="Primary navigation" className="hidden items-center gap-1 md:flex">
             {(
               [
                 { label: 'Find jobs', id: 'jobs' },
@@ -66,7 +61,7 @@ export default function AppShell(): React.JSX.Element {
                 key={id}
                 aria-disabled="true"
                 title="Navigation enabled in JMP-30"
-                className="cursor-default rounded-md px-3 py-2 text-sm font-medium text-[#657789] select-none hover:text-[#1d3448]"
+                className="cursor-default rounded-md px-3 py-2 text-sm font-medium text-brand-muted select-none hover:text-brand-ink"
               >
                 {label}
               </span>
@@ -78,14 +73,14 @@ export default function AppShell(): React.JSX.Element {
             <span
               aria-disabled="true"
               title="Authentication enabled in future sprint"
-              className="hidden cursor-default rounded-lg border border-[#d4dee7] bg-white px-3 py-1.5 text-xs font-semibold text-[#17324d] select-none sm:inline-block"
+              className="hidden cursor-default rounded-lg border border-brand-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy select-none sm:inline-block"
             >
               Sign in
             </span>
             <span
               aria-disabled="true"
               title="Registration enabled in future sprint"
-              className="cursor-default rounded-lg bg-[#17324d] px-3.5 py-1.5 text-xs font-semibold text-white select-none shadow-xs"
+              className="cursor-default rounded-lg bg-brand-navy px-3.5 py-1.5 text-xs font-semibold text-white select-none shadow-xs"
             >
               Create account
             </span>
@@ -93,21 +88,19 @@ export default function AppShell(): React.JSX.Element {
         </div>
 
         {/* Mobile secondary navigation preview */}
-        <div className="flex border-t border-[#d4dee7] px-4 py-2 md:hidden">
-          <ul className="flex list-none gap-2 p-0 text-xs text-[#657789]">
-            {(['Find jobs', 'For employers', 'Resources'] as const).map(
-              (item) => (
-                <li key={item}>
-                  <span
-                    aria-disabled="true"
-                    title="Navigation enabled in JMP-30"
-                    className="cursor-default rounded px-2 py-1 select-none"
-                  >
-                    {item}
-                  </span>
-                </li>
-              ),
-            )}
+        <div className="flex border-t border-brand-line px-4 py-2 md:hidden">
+          <ul className="flex list-none gap-2 p-0 text-xs text-brand-muted">
+            {(['Find jobs', 'For employers', 'Resources'] as const).map((item) => (
+              <li key={item}>
+                <span
+                  aria-disabled="true"
+                  title="Navigation enabled in JMP-30"
+                  className="cursor-default rounded px-2 py-1 select-none"
+                >
+                  {item}
+                </span>
+              </li>
+            ))}
           </ul>
         </div>
       </header>
@@ -119,13 +112,10 @@ export default function AppShell(): React.JSX.Element {
           aria-labelledby="hero-heading"
           className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8"
         >
-          <div className="rounded-2xl border border-[#d4dee7] bg-[#f4f7fa] p-6 sm:p-10 lg:p-12">
+          <div className="rounded-2xl border border-brand-line bg-brand-soft p-6 sm:p-10 lg:p-12">
             <div className="max-w-3xl space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#b9d8d4] bg-[#e8f3f1] px-3 py-1 text-xs font-bold tracking-wider text-[#126761] uppercase">
-                <span
-                  aria-hidden="true"
-                  className="h-1.5 w-1.5 rounded-full bg-[#16847f]"
-                />
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#b9d8d4] bg-brand-accent px-3 py-1 text-xs font-bold tracking-wider text-[#126761] uppercase">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-teal" />
                 Foundation ready · Sprint 1
               </div>
 
@@ -137,10 +127,9 @@ export default function AppShell(): React.JSX.Element {
               </h1>
 
               <p className="text-base leading-relaxed text-[#657789] sm:text-lg">
-                The Job Marketplace frontend foundation is live. Built with
-                React, Vite, strict TypeScript, and Tailwind CSS. Discovery, job
-                search, candidate profiles, and employer management modules will
-                be introduced in upcoming implementation sprints.
+                The Job Marketplace frontend foundation is live. Built with React, Vite, strict
+                TypeScript, and Tailwind CSS. Discovery, job search, candidate profiles, and
+                employer management modules will be introduced in upcoming implementation sprints.
               </p>
             </div>
 
@@ -153,9 +142,7 @@ export default function AppShell(): React.JSX.Element {
                 <span aria-hidden="true" className="mr-2 text-base">
                   ⌕
                 </span>
-                <span className="select-none">
-                  Job title, skill or company…
-                </span>
+                <span className="select-none">Job title, skill or company…</span>
               </div>
               <div className="hidden h-6 w-px bg-[#d4dee7] sm:block" />
               <div className="flex flex-1 items-center px-3 py-2 text-sm text-[#758695]">
@@ -203,9 +190,7 @@ export default function AppShell(): React.JSX.Element {
                   <dt className="text-xs font-bold uppercase tracking-wider text-[#657789]">
                     {label}
                   </dt>
-                  <dd className="text-2xl font-extrabold text-[#16847f]">
-                    {value}
-                  </dd>
+                  <dd className="text-2xl font-extrabold text-[#16847f]">{value}</dd>
                   <dd className="text-xs text-[#657789]">{description}</dd>
                 </div>
               ))}
@@ -219,15 +204,10 @@ export default function AppShell(): React.JSX.Element {
           className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8"
         >
           <div className="mb-4 flex items-baseline justify-between">
-            <h2
-              id="categories-heading"
-              className="text-lg font-bold text-[#17324d]"
-            >
+            <h2 id="categories-heading" className="text-lg font-bold text-[#17324d]">
               Explore by category
             </h2>
-            <span className="text-xs text-[#657789]">
-              Planned for future sprints
-            </span>
+            <span className="text-xs text-[#657789]">Planned for future sprints</span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -266,16 +246,14 @@ export default function AppShell(): React.JSX.Element {
       <footer className="border-t border-[#d4dee7] bg-[#f4f7fa] py-8 text-center text-xs text-[#657789]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="font-medium text-[#17324d]">
-            job<i className="not-italic text-[#16847f]">market</i> — Job
-            Marketplace Platform
+            job<i className="not-italic text-[#16847f]">market</i> — Job Marketplace Platform
           </p>
           <p className="mt-1">
-            Sprint 1: Project Foundation (JMP-25) · Strictly typed React, Vite,
-            and Tailwind CSS architecture.
+            Sprint 1: Project Foundation (JMP-25) · Strictly typed React, Vite, and Tailwind CSS
+            architecture.
           </p>
           <p className="mt-2 text-[#657789]">
-            &copy; {new Date().getFullYear()} Job Marketplace. All rights
-            reserved.
+            &copy; {new Date().getFullYear()} Job Marketplace. All rights reserved.
           </p>
         </div>
       </footer>

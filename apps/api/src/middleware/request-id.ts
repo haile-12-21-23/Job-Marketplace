@@ -12,11 +12,7 @@ const MAX_REQUEST_ID_LENGTH = 128;
 const SAFE_REQUEST_ID_PATTERN = /^[\w-]{1,128}$/;
 
 /** Middleware: assign a request correlation ID and attach it to the response. */
-export function requestId(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
+export function requestId(req: Request, res: Response, next: NextFunction): void {
   const incoming = req.headers['x-request-id'];
   const raw = Array.isArray(incoming) ? incoming[0] : incoming;
 

@@ -36,13 +36,9 @@ describe('@jmp/api -> @jmp/contracts integration', () => {
   });
 
   it('rejects malformed UUID in categoryId and skillId', () => {
-    expect(() =>
-      jobSearchQuerySchema.parse({ categoryId: 'not-a-valid-uuid' }),
-    ).toThrow();
+    expect(() => jobSearchQuerySchema.parse({ categoryId: 'not-a-valid-uuid' })).toThrow();
 
-    expect(() =>
-      jobSearchQuerySchema.parse({ skillId: 'not-a-valid-uuid' }),
-    ).toThrow();
+    expect(() => jobSearchQuerySchema.parse({ skillId: 'not-a-valid-uuid' })).toThrow();
   });
 
   it('enforces page and pageSize bounds', () => {

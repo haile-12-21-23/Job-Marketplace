@@ -67,6 +67,7 @@ pnpm --filter @jmp/api db:seed
 ### Reviewing and Committing Migrations
 
 All migrations live in `apps/api/prisma/migrations/<timestamp>_<name>/migration.sql`.
+
 - Migration files are immutable once applied and committed.
 - Always review generated SQL before committing.
 - Any custom database constraints, triggers, or partial indexes must be committed directly within migration SQL files.
@@ -79,23 +80,23 @@ All migrations live in `apps/api/prisma/migrations/<timestamp>_<name>/migration.
 
 From the repository root:
 
-| Command | Description |
-|---|---|
-| `pnpm --filter @jmp/api dev` | Start development server with file watching via `tsx` |
-| `pnpm --filter @jmp/api build` | Generate Prisma client and compile TypeScript to `dist/` |
-| `pnpm --filter @jmp/api start` | Run compiled production bundle with `node dist/server.js` |
-| `pnpm --filter @jmp/api lint` | Lint API source files with ESLint |
-| `pnpm --filter @jmp/api typecheck` | Run strict TypeScript compiler verification without emitting |
-| `pnpm --filter @jmp/api test` | Run unit and integration tests with Vitest |
-| `pnpm --filter @jmp/api db:format` | Format `prisma/schema.prisma` |
-| `pnpm --filter @jmp/api db:validate` | Validate `prisma/schema.prisma` syntax and references |
-| `pnpm --filter @jmp/api db:generate` | Generate Prisma 7 Client to `src/generated/prisma` |
-| `pnpm --filter @jmp/api db:migrate:dev` | Apply migrations to development database |
-| `pnpm --filter @jmp/api db:migrate:deploy` | Apply migrations in staging/production |
-| `pnpm --filter @jmp/api db:migrate:status` | Check status of database migrations |
-| `pnpm --filter @jmp/api db:seed` | Seed deterministic reference data (platform roles) |
-| `pnpm --filter @jmp/api db:studio` | Open interactive Prisma Studio GUI |
-| `pnpm check` | Run workspace-wide lint, typecheck, and test checks |
+| Command                                    | Description                                                  |
+| ------------------------------------------ | ------------------------------------------------------------ |
+| `pnpm --filter @jmp/api dev`               | Start development server with file watching via `tsx`        |
+| `pnpm --filter @jmp/api build`             | Generate Prisma client and compile TypeScript to `dist/`     |
+| `pnpm --filter @jmp/api start`             | Run compiled production bundle with `node dist/server.js`    |
+| `pnpm --filter @jmp/api lint`              | Lint API source files with ESLint                            |
+| `pnpm --filter @jmp/api typecheck`         | Run strict TypeScript compiler verification without emitting |
+| `pnpm --filter @jmp/api test`              | Run unit and integration tests with Vitest                   |
+| `pnpm --filter @jmp/api db:format`         | Format `prisma/schema.prisma`                                |
+| `pnpm --filter @jmp/api db:validate`       | Validate `prisma/schema.prisma` syntax and references        |
+| `pnpm --filter @jmp/api db:generate`       | Generate Prisma 7 Client to `src/generated/prisma`           |
+| `pnpm --filter @jmp/api db:migrate:dev`    | Apply migrations to development database                     |
+| `pnpm --filter @jmp/api db:migrate:deploy` | Apply migrations in staging/production                       |
+| `pnpm --filter @jmp/api db:migrate:status` | Check status of database migrations                          |
+| `pnpm --filter @jmp/api db:seed`           | Seed deterministic reference data (platform roles)           |
+| `pnpm --filter @jmp/api db:studio`         | Open interactive Prisma Studio GUI                           |
+| `pnpm check`                               | Run workspace-wide lint, typecheck, and test checks          |
 
 ## Endpoints
 
@@ -107,5 +108,5 @@ From the repository root:
 
 - **`createApp()` in `src/app.ts`**: Pure Express application factory free of database connection, listener, or process signal side-effects. Enables pure unit testing without a running PostgreSQL instance.
 - **`src/server.ts`**: Dedicated process entry point. Connects to PostgreSQL via `connectDatabase()` before starting the HTTP listener. Integrates bounded graceful shutdown and database disconnect.
-- **`src/config/database-config.ts`**: Validates `DATABASE_URL` format and fast-fails safely without exposing sensitive connection credentials in logs.
+- **`src/config/env.ts`**: Validates environment variables (`NODE_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGINS`, `LOG_LEVEL`) at API process startup using Zod and fast-fails safely without exposing sensitive connection credentials in logs or errors.
 - **`src/infrastructure/database/prisma.ts`**: Manages the singleton Prisma 7 client with `PrismaPg` adapter and bounded connection pool settings.

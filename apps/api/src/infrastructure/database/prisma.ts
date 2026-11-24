@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client.js';
-import { getDatabaseConfig } from '../../config/database-config.js';
+import { loadEnv } from '../../config/env.js';
 import { logger } from '../../observability/logger.js';
 
 const { Pool } = pg;
@@ -12,12 +12,14 @@ let prismaClientInstance: PrismaClient | null = null;
 /**
  * Initializes and returns the shared PrismaClient singleton.
  * Configured with PrismaPg adapter and bounded connection pool behavior.
+ *
+ * @param databaseUrl Optional explicit database connection URL. If omitted, loaded from loadEnv().
  */
-export function getPrismaClient(): PrismaClient {
+export function getPrismaClient(databaseUrl?: string): PrismaClient {
   if (!prismaClientInstance) {
-    const config = getDatabaseConfig();
+    const url = databaseUrl ?? loadEnv().databaseUrl;
     pool = new Pool({
-      connectionString: config.databaseUrl,
+      connectionString: url,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -60,8 +62,8 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
  * Explicitly connects to the database and verifies connectivity via a smoke test query.
  * Must be called in the server startup path before accepting traffic.
  */
-export async function connectDatabase(): Promise<PrismaClient> {
-  const client = getPrismaClient();
+export async function connectDatabase(databaseUrl?: string): Promise<PrismaClient> {
+  const client = getPrismaClient(databaseUrl);
   await client.$queryRawUnsafe('SELECT 1');
   return client;
 }
