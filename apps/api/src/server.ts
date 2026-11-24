@@ -3,18 +3,40 @@ import http from 'node:http';
 import { createApp } from './app.js';
 import { logger } from './observability/logger.js';
 import { connectDatabase, disconnectDatabase } from './infrastructure/database/prisma.js';
+import { loadEnv, EnvironmentValidationError } from './config/env.js';
+import type { ApiConfig } from './config/env.js';
 
-const PORT = Number(process.env['PORT'] ?? 3000);
+// ── Environment Validation (Startup Boundary) ────────────────────────────────
+let config: ApiConfig;
+try {
+  config = loadEnv();
+} catch (err) {
+  if (err instanceof EnvironmentValidationError) {
+    logger.fatal(
+      {
+        issues: err.issues,
+      },
+      'Environment validation failed — aborting server startup',
+    );
+  } else {
+    logger.fatal({ err }, 'Unexpected error during environment validation');
+  }
+  process.exit(1);
+}
+
+logger.level = config.logLevel;
+
+const PORT = config.port;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const app = createApp();
+const app = createApp({ corsOrigins: config.corsOrigins });
 const server = http.createServer(app);
 
 // ── Startup ──────────────────────────────────────────────────────────────────
 
 async function start(): Promise<void> {
   try {
-    await connectDatabase();
+    await connectDatabase(config.databaseUrl);
     logger.info('Database connection established successfully');
 
     server.listen(PORT, () => {

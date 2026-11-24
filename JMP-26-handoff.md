@@ -9,6 +9,7 @@
 ## 1. Files Created and Updated
 
 ### Created in `apps/api/`
+
 - [`apps/api/src/app.ts`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/src/app.ts) — Express application factory `createApp()` with zero listen/process side effects for safe integration testing.
 - [`apps/api/src/server.ts`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/src/server.ts) — Process entry point: starts HTTP server on port 3000 (configurable via `PORT`), handles startup errors (`EADDRINUSE`), registers graceful idempotent shutdown on `SIGTERM` / `SIGINT` (exit code 0) and `unhandledRejection` / `uncaughtException` (bounded shutdown with exit code 1).
 - [`apps/api/src/observability/logger.ts`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/src/observability/logger.ts) — Singleton Pino structured logger configured with security redactions (`authorization`, `cookie`, `password`, `token`).
@@ -27,6 +28,7 @@
 - [`apps/api/README.md`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/README.md) — Documentation covering package scripts, baseline, endpoints, and architectural roadmap.
 
 ### Updated
+
 - [`apps/api/package.json`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/package.json) — Added `dev`, `build`, and `start` scripts, Express 5, CORS, Helmet, Pino, and dev tooling.
 - [`apps/api/tsconfig.json`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/tsconfig.json) — Included `.d.ts` declaration merging.
 - [`apps/api/src/index.ts`](file:///Users/abcd/Documents/Devs/haile/projects/job-marketplace/apps/api/src/index.ts) — Main entry preserving contract version and exporting `createApp`, `AppError`, `logger`.
@@ -36,6 +38,7 @@
 ## 2. Installed Dependencies
 
 ### Runtime Dependencies
+
 - `express`: `^5.1.0` (installed `5.3.0`)
 - `helmet`: `^8.0.0` (installed `8.1.0`)
 - `cors`: `^2.8.5` (installed `2.8.5`)
@@ -44,6 +47,7 @@
 - `@jmp/contracts`: `workspace:*`
 
 ### Development Dependencies
+
 - `@types/express`: `^5.0.3` (installed `5.0.6`)
 - `@types/cors`: `^2.8.17` (installed `2.8.17`)
 - `@types/node`: `^22.13.10` (installed `22.13.10`)
@@ -79,17 +83,17 @@
 
 ## 5. Verification Commands and Results
 
-| Command | Result | Notes |
-|---|---|---|
-| `pnpm --filter @jmp/api lint` | ✅ PASS | 0 warnings, 0 errors |
-| `pnpm --filter @jmp/api typecheck` | ✅ PASS | Strict TypeScript compiler check passed |
-| `pnpm --filter @jmp/api test` | ✅ PASS | 12 tests passed across 2 test files |
-| `pnpm --filter @jmp/api build` | ✅ PASS | Output generated in `apps/api/dist/` |
-| `pnpm workspace:check` | ✅ PASS | 4 packages validated |
-| `pnpm check` | ✅ PASS | Lint, typecheck, and tests passed across entire monorepo |
-| `curl -i http://localhost:3000/` | ✅ PASS | HTTP 200 `{"service":"Job Marketplace API","apiBase":"/api/v1"}` |
-| `curl -i http://localhost:3000/api/v1` | ✅ PASS | HTTP 200 `{"data":{"service":"Job Marketplace API","version":"v1","status":"ok"}}` |
-| `curl -i http://localhost:3000/api/v1/unknown` | ✅ PASS | HTTP 404 `application/problem+json` with `ROUTE_NOT_FOUND` & correlation ID |
+| Command                                        | Result  | Notes                                                                              |
+| ---------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `pnpm --filter @jmp/api lint`                  | ✅ PASS | 0 warnings, 0 errors                                                               |
+| `pnpm --filter @jmp/api typecheck`             | ✅ PASS | Strict TypeScript compiler check passed                                            |
+| `pnpm --filter @jmp/api test`                  | ✅ PASS | 12 tests passed across 2 test files                                                |
+| `pnpm --filter @jmp/api build`                 | ✅ PASS | Output generated in `apps/api/dist/`                                               |
+| `pnpm workspace:check`                         | ✅ PASS | 4 packages validated                                                               |
+| `pnpm check`                                   | ✅ PASS | Lint, typecheck, and tests passed across entire monorepo                           |
+| `curl -i http://localhost:3000/`               | ✅ PASS | HTTP 200 `{"service":"Job Marketplace API","apiBase":"/api/v1"}`                   |
+| `curl -i http://localhost:3000/api/v1`         | ✅ PASS | HTTP 200 `{"data":{"service":"Job Marketplace API","version":"v1","status":"ok"}}` |
+| `curl -i http://localhost:3000/api/v1/unknown` | ✅ PASS | HTTP 404 `application/problem+json` with `ROUTE_NOT_FOUND` & correlation ID        |
 
 ---
 

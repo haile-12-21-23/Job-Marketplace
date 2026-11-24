@@ -3,7 +3,9 @@
 ## 1. Summary of Changes & Architecture
 
 ### Database & Prisma Architecture
+
 JMP-27 establishes the foundational PostgreSQL and Prisma 7 persistence layer for `@jmp/api` across all 6 logical domains defined in the approved ERD specification:
+
 - **Prisma 7 Configuration (`apps/api/prisma7.config.ts`)**: Configured with `defineConfig`, pointing to PostgreSQL datasource, generator output `./src/generated/prisma`, and migration seeder `tsx prisma/seed.ts`.
 - **Complete Logical Data Model (`apps/api/prisma/schema.prisma`)**: Models all 37 ERD domain entities and 17 enums with UUID primary keys, explicit PostgreSQL type mappings (`timestamptz(6)`, `numeric(12,2)` for salary, `uuid`), and PascalCase models mapped to snake_case physical tables and columns via `@map` / `@@map`.
 - **Initial Migration (`apps/api/prisma/migrations/20261124110222_init/migration.sql`)**: Generated and applied via `prisma migrate dev`. Augmented with explicit PostgreSQL `CHECK` constraints (email normalization, non-negative salary, max >= min salary range, single report target invariant) and a partial unique index (`uq_employer_verification_pending` for pending employer verification requests).
@@ -17,6 +19,7 @@ JMP-27 establishes the foundational PostgreSQL and Prisma 7 persistence layer fo
 ## 2. Package & Dependency Versions
 
 Installed in `apps/api`:
+
 - **Prisma CLI**: `7.10.1` (`prisma`)
 - **Prisma Client**: `7.10.1` (`@prisma/client`)
 - **Prisma PostgreSQL Adapter**: `7.10.1` (`@prisma/adapter-pg`)
@@ -32,6 +35,7 @@ Installed in `apps/api`:
 - **Total Enums**: 17 PostgreSQL enums.
 
 ### Entities by Logical Domain:
+
 1. **Identity and Platform Access (8 models)**:
    - `User`, `UserSession`, `EmailVerificationToken`, `PasswordResetToken`, `PlatformRole`, `Permission`, `RolePermission`, `UserPlatformRole`
 2. **Candidate Profile (6 models)**:
@@ -46,6 +50,7 @@ Installed in `apps/api`:
    - `Notification`, `NotificationPreference`, `NotificationDelivery`, `OutboxEvent`, `Report`, `ModerationAction`, `AuditLog`
 
 ### Documented Assumptions:
+
 - `Job`: Added `remoteWorldwide Boolean @default(false)` to distinguish worldwide remote eligibility from an explicitly listed set of countries in `job_eligible_countries` (BR-044).
 - `EmployerAccount`: Subtype profiles (`IndividualEmployerProfile`, `OrganizationProfile`) reference `EmployerAccount` with `@unique` on foreign keys. Cross-table mutual exclusivity is documented for domain service transactions.
 - `ApplicationResumeSnapshot`: One-to-one with `Application` (`application_id` unique). Retains frozen object storage key and file metadata even if source `Resume` is later soft-deleted or removed.
@@ -87,26 +92,27 @@ Installed in `apps/api`:
 
 All required verification commands were executed and passed cleanly:
 
-| Command | Status | Output / Details |
-|---|---|---|
-| `pnpm --filter @jmp/api db:format` | **PASS** | `Formatted prisma/schema.prisma in 34ms` |
-| `pnpm --filter @jmp/api db:validate` | **PASS** | `The schema at prisma/schema.prisma is valid` |
-| `pnpm --filter @jmp/api db:generate` | **PASS** | `Generated Prisma Client (7.10.1) to ./src/generated/prisma in 169ms` |
-| `pnpm --filter @jmp/api db:migrate:dev` | **PASS** | `Applying migration 20261124110222_init ... Your database is now in sync with your schema.` |
-| `pnpm --filter @jmp/api db:migrate:status` | **PASS** | `1 migration found in prisma/migrations. Database schema is up to date!` |
-| `pnpm --filter @jmp/api db:seed` | **PASS** | `Initial platform roles seeded successfully.` (4 roles upserted) |
-| `pnpm --filter @jmp/api lint` | **PASS** | `eslint src --max-warnings=0` (0 errors, 0 warnings) |
-| `pnpm --filter @jmp/api typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
-| `pnpm --filter @jmp/api test` | **PASS** | 4 test suites passed, 23 tests passed (`app.test.ts`, `database-config.test.ts`, `prisma.test.ts`, `index.test.ts`) |
-| `pnpm --filter @jmp/api build` | **PASS** | `pnpm db:generate && tsc -p tsconfig.build.json` succeeded cleanly |
-| `pnpm workspace:check` | **PASS** | `Workspace structure OK (4 packages; all workspace:* references resolve)` |
-| `pnpm check` | **PASS** | Full workspace check (all packages lint, typecheck, and test green) |
+| Command                                    | Status   | Output / Details                                                                                                    |
+| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @jmp/api db:format`         | **PASS** | `Formatted prisma/schema.prisma in 34ms`                                                                            |
+| `pnpm --filter @jmp/api db:validate`       | **PASS** | `The schema at prisma/schema.prisma is valid`                                                                       |
+| `pnpm --filter @jmp/api db:generate`       | **PASS** | `Generated Prisma Client (7.10.1) to ./src/generated/prisma in 169ms`                                               |
+| `pnpm --filter @jmp/api db:migrate:dev`    | **PASS** | `Applying migration 20261124110222_init ... Your database is now in sync with your schema.`                         |
+| `pnpm --filter @jmp/api db:migrate:status` | **PASS** | `1 migration found in prisma/migrations. Database schema is up to date!`                                            |
+| `pnpm --filter @jmp/api db:seed`           | **PASS** | `Initial platform roles seeded successfully.` (4 roles upserted)                                                    |
+| `pnpm --filter @jmp/api lint`              | **PASS** | `eslint src --max-warnings=0` (0 errors, 0 warnings)                                                                |
+| `pnpm --filter @jmp/api typecheck`         | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors)                                                                     |
+| `pnpm --filter @jmp/api test`              | **PASS** | 4 test suites passed, 23 tests passed (`app.test.ts`, `database-config.test.ts`, `prisma.test.ts`, `index.test.ts`) |
+| `pnpm --filter @jmp/api build`             | **PASS** | `pnpm db:generate && tsc -p tsconfig.build.json` succeeded cleanly                                                  |
+| `pnpm workspace:check`                     | **PASS** | `Workspace structure OK (4 packages; all workspace:* references resolve)`                                           |
+| `pnpm check`                               | **PASS** | Full workspace check (all packages lint, typecheck, and test green)                                                 |
 
 ---
 
 ## 7. Acceptance Criteria Status
 
 All acceptance criteria defined in `JMP-27-instruction.md` have been fully met and verified against live PostgreSQL:
+
 - [x] API connects to PostgreSQL using validated `DATABASE_URL` without credential exposure in logs.
 - [x] Prisma schema validates and Prisma Client is generated via Prisma 7.
 - [x] Complete initial migration (`init`) for approved JMP logical data model applied to newly created local development database `jmp_dev`.
@@ -121,6 +127,7 @@ All acceptance criteria defined in `JMP-27-instruction.md` have been fully met a
 ## 8. Scope Boundaries & Next Steps
 
 In strict adherence to the project roadmap and scope boundaries:
+
 - **JMP-28**: Shared Zod contracts package.
 - **JMP-29**: Centralized environment validation and tooling refinements. The minimal `database-config.ts` guard implemented here is isolated and prepared for replacement by JMP-29.
 - **JMP-31**: Docker Compose orchestration and health/readiness endpoints (`/health`, `/health/live`, `/health/ready`).

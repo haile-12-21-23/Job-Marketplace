@@ -16,18 +16,14 @@ interface AppErrorBoundaryProps {
  * constructors of child components. Does NOT catch errors in asynchronous
  * callbacks or event handlers (use try/catch there).
  */
-export class AppErrorBoundary extends React.Component<
-  AppErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: AppErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, errorMessage: '' };
   }
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    const message =
-      error instanceof Error ? error.message : 'An unexpected error occurred.';
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { hasError: true, errorMessage: message };
   }
 
@@ -66,12 +62,10 @@ export class AppErrorBoundary extends React.Component<
           </div>
 
           <div className="max-w-md space-y-2">
-            <h1 className="text-2xl font-bold text-[#17324d]">
-              Something went wrong
-            </h1>
-            <p className="text-sm leading-relaxed text-[#657789]">
-              The page encountered an unexpected error. You can try refreshing
-              or clicking the button below to recover.
+            <h1 className="text-2xl font-bold text-brand-navy">Something went wrong</h1>
+            <p className="text-sm leading-relaxed text-brand-muted">
+              The page encountered an unexpected error. You can try refreshing or clicking the
+              button below to recover.
             </p>
           </div>
 
@@ -79,14 +73,14 @@ export class AppErrorBoundary extends React.Component<
             <button
               type="button"
               onClick={this.handleReset}
-              className="rounded-lg bg-[#16847f] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#126761] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16847f]"
+              className="rounded-lg bg-brand-teal px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#126761] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16847f]"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="rounded-lg border border-[#d4dee7] bg-white px-5 py-2.5 text-sm font-semibold text-[#17324d] shadow-xs hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#17324d]"
+              className="rounded-lg border border-brand-line bg-white px-5 py-2.5 text-sm font-semibold text-[#17324d] shadow-xs hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#17324d]"
             >
               Reload page
             </button>

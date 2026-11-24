@@ -4,7 +4,7 @@
 **Jira:** JMP-28 - Create shared Zod contracts package  
 **Sprint:** Sprint 1 - Project Foundation  
 **Package:** `@jmp/contracts`  
-**Assignee:** Current Jira assignee  
+**Assignee:** Current Jira assignee
 
 ## 1. Objective
 
@@ -80,12 +80,14 @@ Add a public opaque-ID schema matching the API Standards:
 Implement the standard page-based query and metadata schemas from `JMP_API_Standards_v1.0`.
 
 **Pagination query input:**
+
 - `page`: positive integer, default `1`.
 - `pageSize`: positive integer, default `20`, maximum `100`.
 - `q`: optional trimmed search phrase, maximum `120` characters.
 - Unknown query properties should be rejected for this initial explicit query schema.
 
 **Pagination output metadata:**
+
 - `page`: positive integer.
 - `pageSize`: positive integer, maximum `100`.
 - `totalItems`: non-negative integer.

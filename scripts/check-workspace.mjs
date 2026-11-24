@@ -37,4 +37,6 @@ for (const name of ['@jmp/web', '@jmp/api', '@jmp/contracts']) {
   if (!packages.has(name)) missing.push(`Required workspace package is missing: ${name}`);
 }
 if (missing.length) throw new Error(missing.join('\n'));
-console.log(`Workspace structure OK (${packages.size} packages; all workspace:* references resolve).`);
+console.log(
+  `Workspace structure OK (${packages.size} packages; all workspace:* references resolve).`,
+);

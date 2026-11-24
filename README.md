@@ -33,15 +33,15 @@ Commit the generated `pnpm-lock.yaml`. CI and other developers should then use `
 
 ## Root commands
 
-| Command                  | Purpose                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------- |
-| `pnpm lint`              | Run lint scripts in all workspace packages that define one.                                     |
-| `pnpm typecheck`         | Run TypeScript checks in all workspace packages that define one.                                |
-| `pnpm test`              | Run tests in all workspace packages that define one.                                            |
-| `pnpm check`             | Run lint, typecheck and tests in sequence.                                                      |
-| `pnpm format`            | Format supported files with Prettier.                                                           |
-| `pnpm format:check`      | Check formatting without changing files.                                                        |
-| `pnpm workspace:check`  | Validate workspace folders and internal `workspace:*` references without installing packages. |
+| Command                | Purpose                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm lint`            | Run lint scripts in all workspace packages that define one.                                   |
+| `pnpm typecheck`       | Run TypeScript checks in all workspace packages that define one.                              |
+| `pnpm test`            | Run tests in all workspace packages that define one.                                          |
+| `pnpm check`           | Run format check, lint, typecheck and tests in sequence.                                      |
+| `pnpm format`          | Format supported files with Prettier.                                                         |
+| `pnpm format:check`    | Check formatting without changing files.                                                      |
+| `pnpm workspace:check` | Validate workspace folders and internal `workspace:*` references without installing packages. |
 
 ## Workspace layout
 
@@ -88,5 +88,5 @@ pnpm --filter @jmp/api dev
 
 ## Expected local URLs
 
-  Frontend: <http://localhost:5173>
- Backend: <http://localhost:3000>
+Frontend: <http://localhost:5173>
+Backend: <http://localhost:3000>

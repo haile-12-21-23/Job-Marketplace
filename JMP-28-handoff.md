@@ -3,6 +3,7 @@
 ## 1. Summary of Changes & Architecture
 
 ### Package Structure
+
 JMP-28 establishes the browser-safe, shared Zod contract package (`@jmp/contracts`) consumed by both `@jmp/web` (React/Vite) and `@jmp/api` (Express/Node.js). The schemas serve as the single source of truth for public request and response shapes, with TypeScript types inferred directly:
 
 ```text
@@ -27,6 +28,7 @@ packages/contracts/
 ```
 
 ### Key Architectural Boundaries:
+
 - **Zero Server Leaks**: `@jmp/contracts` contains zero dependencies on Prisma, database drivers (`pg`), Express, Node.js built-ins (`fs`, `path`), server environment variables, or secrets.
 - **Strict Separation from ORM Models**: Public DTOs describe the public HTTP interface and never mirror internal Prisma models or expose internal database sequential IDs.
 - **Type Inference**: All public TypeScript interfaces are inferred via `z.input` and `z.output` (`z.infer`). No duplicate handwritten interfaces are maintained.
@@ -38,6 +40,7 @@ packages/contracts/
 ## 2. Package Configuration & Production Export Strategy
 
 ### Dual Resolution Configuration (`packages/contracts/package.json`):
+
 ```json
 {
   "name": "@jmp/contracts",
@@ -77,13 +80,16 @@ packages/contracts/
 Exported through the single public barrel `packages/contracts/src/index.ts`:
 
 ### API Version Marker:
+
 - `API_VERSION` (`'v1'`), `ApiVersion`
 
 ### Identifiers:
+
 - `publicIdSchema`: UUID string validator.
 - `PublicId`: `z.infer<typeof publicIdSchema>` (`string`)
 
 ### Pagination:
+
 - `pageQueryParamSchema`: Coerced positive integer query parameter (defaults to 1).
 - `pageSizeQueryParamSchema`: Coerced positive integer query parameter (max 100, defaults to 20).
 - `paginationQuerySchema`: Standard page-based query input schema (`page`, `pageSize`, `q` trimmed up to 120 chars, strict).
@@ -93,18 +99,21 @@ Exported through the single public barrel `packages/contracts/src/index.ts`:
 - `PaginationMeta`: `z.infer<typeof paginationMetaSchema>`
 
 ### Envelopes:
+
 - `createDataEnvelopeSchema(dataSchema)` (alias: `createSingleResourceResponseSchema`): Factory for `{ data: T }`.
 - `createPaginatedEnvelopeSchema(itemSchema)` (alias: `createCollectionResponseSchema`): Factory for `{ data: T[], meta: { pagination: PaginationMeta } }`.
 - `DataEnvelope<T>` / `SingleResourceResponse<T>`
 - `PaginatedEnvelope<T>` / `CollectionResponse<T>`
 
 ### RFC 9457 Problem Details:
+
 - `problemDetailErrorItemSchema`: Field-level validation error (`pointer`, `code`, `detail`).
 - `problemDetailsSchema`: Standard problem details with extensions (`type`, `title`, `status`, `detail`, `instance`, `code`, `requestId`, `errors`).
 - `ProblemDetailErrorItem`: `z.infer<typeof problemDetailErrorItemSchema>`
 - `ProblemDetails`: `z.infer<typeof problemDetailsSchema>`
 
 ### Jobs Domain Contracts:
+
 - `countryCodeSchema`: 2-letter uppercase ISO 3166-1 alpha-2 country code (`string`, normalized to uppercase).
 - `JOB_SEARCH_SORT_VALUES`: Allowlist `['publishedAt:desc', 'publishedAt:asc', 'createdAt:desc', 'createdAt:asc']`.
 - `jobSearchSortSchema`: `z.enum(JOB_SEARCH_SORT_VALUES)`.
@@ -141,23 +150,32 @@ Both `@jmp/web` and `@jmp/api` consume the shared contracts via the workspace pa
 ## 5. Production-Runtime Verification & Live Execution
 
 ### A. Direct Production Node Import Test:
+
 Command:
+
 ```bash
 node -e "import('@jmp/contracts').then(({ jobSearchQuerySchema, API_VERSION }) => console.log('API_VERSION:', API_VERSION, 'parse:', jobSearchQuerySchema.parse({ page: 2 })))"
 ```
+
 Output:
+
 ```text
 API_VERSION: v1 parse: { page: 2, pageSize: 20 }
 ```
+
 (Exit code 0 — pure Node without tsx or loaders).
 
 ### B. Compiled API Production Startup & Live Endpoint Test:
+
 Command:
+
 ```bash
 PORT=3005 pnpm --filter @jmp/api start
 curl -i http://localhost:3005/api/v1
 ```
+
 Output:
+
 ```text
 $ node dist/server.js
 {"level":30,"msg":"Database connection established successfully"}
@@ -170,6 +188,7 @@ Content-Length: 71
 
 {"data":{"service":"Job Marketplace API","version":"v1","status":"ok"}}
 ```
+
 (Exit code 0 — compiled API runs with production package exports and returns HTTP 200).
 
 ---
@@ -178,17 +197,17 @@ Content-Length: 71
 
 All required verification commands executed cleanly with 100% pass rates:
 
-| Command | Status | Details |
-|---|---|---|
-| `pnpm --filter @jmp/contracts lint` | **PASS** | `eslint src --max-warnings=0` (0 errors, 0 warnings) |
-| `pnpm --filter @jmp/contracts typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
-| `pnpm --filter @jmp/contracts test` | **PASS** | 3 test suites, 38 tests passed (`common.test.ts`, `job-search.test.ts`, `index.test.ts`) |
-| `pnpm --filter @jmp/contracts build` | **PASS** | `tsc -p tsconfig.build.json` emitted valid JS, declaration files (`.d.ts`), and maps to `dist/` |
-| `pnpm --filter @jmp/api typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
-| `pnpm --filter @jmp/api test` | **PASS** | 5 test suites, 29 tests passed (including `contracts.test.ts`) |
-| `pnpm --filter @jmp/api build` | **PASS** | `pnpm db:generate && tsc -p tsconfig.build.json` succeeded cleanly |
-| `pnpm --filter @jmp/web typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors) |
-| `pnpm --filter @jmp/web test` | **PASS** | 4 test suites, 13 tests passed (including `contracts.test.ts`) |
-| `pnpm --filter @jmp/web build` | **PASS** | `tsc --noEmit && vite build` built client bundle in 75ms |
-| `pnpm workspace:check` | **PASS** | All 4 workspace packages resolve cleanly with no missing dependencies |
-| `pnpm check` | **PASS** | Full monorepo validation (lint, typecheck, test 100% green across all packages) |
+| Command                                  | Status   | Details                                                                                         |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `pnpm --filter @jmp/contracts lint`      | **PASS** | `eslint src --max-warnings=0` (0 errors, 0 warnings)                                            |
+| `pnpm --filter @jmp/contracts typecheck` | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors)                                                 |
+| `pnpm --filter @jmp/contracts test`      | **PASS** | 3 test suites, 38 tests passed (`common.test.ts`, `job-search.test.ts`, `index.test.ts`)        |
+| `pnpm --filter @jmp/contracts build`     | **PASS** | `tsc -p tsconfig.build.json` emitted valid JS, declaration files (`.d.ts`), and maps to `dist/` |
+| `pnpm --filter @jmp/api typecheck`       | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors)                                                 |
+| `pnpm --filter @jmp/api test`            | **PASS** | 5 test suites, 29 tests passed (including `contracts.test.ts`)                                  |
+| `pnpm --filter @jmp/api build`           | **PASS** | `pnpm db:generate && tsc -p tsconfig.build.json` succeeded cleanly                              |
+| `pnpm --filter @jmp/web typecheck`       | **PASS** | `tsc --noEmit -p tsconfig.json` (0 type errors)                                                 |
+| `pnpm --filter @jmp/web test`            | **PASS** | 4 test suites, 13 tests passed (including `contracts.test.ts`)                                  |
+| `pnpm --filter @jmp/web build`           | **PASS** | `tsc --noEmit && vite build` built client bundle in 75ms                                        |
+| `pnpm workspace:check`                   | **PASS** | All 4 workspace packages resolve cleanly with no missing dependencies                           |
+| `pnpm check`                             | **PASS** | Full monorepo validation (lint, typecheck, test 100% green across all packages)                 |

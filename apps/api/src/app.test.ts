@@ -7,8 +7,7 @@ const app = createApp();
 
 // ── Helper ───────────────────────────────────────────────────────────────────
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Test: GET /api/v1 ────────────────────────────────────────────────────────
 
@@ -35,20 +34,14 @@ describe('GET /api/v1', () => {
 
   it('echoes a safe, well-formed incoming X-Request-Id', async () => {
     const safeId = '550e8400-e29b-41d4-a716-446655440000';
-    const res = await request(app)
-      .get('/api/v1')
-      .set('X-Request-Id', safeId)
-      .expect(200);
+    const res = await request(app).get('/api/v1').set('X-Request-Id', safeId).expect(200);
 
     expect(res.headers['x-request-id']).toBe(safeId);
   });
 
   it('replaces an invalid/unsafe incoming X-Request-Id with a generated UUID', async () => {
     const unsafeId = '<script>alert(1)</script>';
-    const res = await request(app)
-      .get('/api/v1')
-      .set('X-Request-Id', unsafeId)
-      .expect(200);
+    const res = await request(app).get('/api/v1').set('X-Request-Id', unsafeId).expect(200);
 
     const returned = res.headers['x-request-id'] as string;
     expect(returned).not.toBe(unsafeId);
@@ -133,21 +126,37 @@ describe('CORS', () => {
       .set('Access-Control-Request-Method', 'GET')
       .expect(204);
 
-    expect(res.headers['access-control-allow-origin']).toBe(
-      'http://localhost:5173',
-    );
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
   });
 
   it('does not grant wildcard access to arbitrary origins', async () => {
-    const res = await request(app)
-      .get('/api/v1')
-      .set('Origin', 'http://evil.example.com');
+    const res = await request(app).get('/api/v1').set('Origin', 'http://evil.example.com');
 
     // Should not reflect the arbitrary origin.
-    expect(res.headers['access-control-allow-origin']).not.toBe(
-      'http://evil.example.com',
-    );
+    expect(res.headers['access-control-allow-origin']).not.toBe('http://evil.example.com');
     expect(res.headers['access-control-allow-origin']).not.toBe('*');
+  });
+
+  it('supports custom corsOrigins passed to createApp without process.env', async () => {
+    const customApp = createApp({
+      corsOrigins: ['https://custom.jmp.example.com'],
+    });
+
+    const allowedRes = await request(customApp)
+      .options('/api/v1')
+      .set('Origin', 'https://custom.jmp.example.com')
+      .set('Access-Control-Request-Method', 'GET')
+      .expect(204);
+
+    expect(allowedRes.headers['access-control-allow-origin']).toBe(
+      'https://custom.jmp.example.com',
+    );
+
+    const deniedRes = await request(customApp)
+      .get('/api/v1')
+      .set('Origin', 'http://localhost:5173');
+
+    expect(deniedRes.headers['access-control-allow-origin']).not.toBe('http://localhost:5173');
   });
 });
 

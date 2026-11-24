@@ -10,16 +10,8 @@ import { notFound } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rootRouter } from './routes/index.js';
 
-/**
- * Parse CORS_ORIGINS env var into an array.
- * Defaults to the local Vite dev server origin.
- */
-function getAllowedOrigins(): string[] {
-  const raw = process.env['CORS_ORIGINS'] ?? 'http://localhost:5173';
-  return raw
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
+export interface AppOptions {
+  corsOrigins?: string[];
 }
 
 /**
@@ -28,8 +20,10 @@ function getAllowedOrigins(): string[] {
  * IMPORTANT: This function must NOT start listening, register process signal
  * handlers, or start background work. That is the responsibility of server.ts.
  * This separation ensures tests can import the app without binding a port.
+ *
+ * createApp() is completely pure and has zero process.env dependencies.
  */
-export function createApp(): express.Application {
+export function createApp(options?: AppOptions): express.Application {
   const app = express();
 
   // ── 1. Remove X-Powered-By ───────────────────────────────────────────────
@@ -44,11 +38,7 @@ export function createApp(): express.Application {
       logger,
       // Attach request ID from the enriched request object.
       genReqId: (req: IncomingMessage) => (req as Request).requestId,
-      customLogLevel: (
-        _req: IncomingMessage,
-        res: ServerResponse,
-        err?: Error,
-      ) => {
+      customLogLevel: (_req: IncomingMessage, res: ServerResponse, err?: Error) => {
         if (err !== undefined || (res.statusCode !== undefined && res.statusCode >= 500)) {
           return 'error';
         }
@@ -66,7 +56,7 @@ export function createApp(): express.Application {
   app.use(helmet());
 
   // ── 5. CORS ──────────────────────────────────────────────────────────────
-  const allowedOrigins = getAllowedOrigins();
+  const allowedOrigins = options?.corsOrigins ?? ['http://localhost:5173'];
   app.use(
     cors({
       origin: (origin, callback) => {

@@ -39,6 +39,7 @@ apps/web/
 ## 2. Design Decisions & UX Baseline Alignment
 
 ### Approved UX Wireframe Integration (`JMP_UIUX_IA_Wireframes_v1.0.md` & `JMP_UI_Wireframes_v1.0.html`)
+
 - **Brand & Wordmark**:
   Implemented `jobmarket` brand treatment matching wireframe Screen 01 (`job` in `#17324d` navy and `market` in `#16847f` teal italic) with accessible home link and keyboard focus indicator.
 - **Brand Palette Tokens (@theme)**:
@@ -63,6 +64,7 @@ apps/web/
   - Explore by category preview cards (`Technology`, `Business & Finance`, `Engineering`).
 
 ### Global Error Boundary (`AppErrorBoundary`)
+
 - Class component implementing `getDerivedStateFromError` and `componentDidCatch`.
 - Clear plain-language message: "Something went wrong".
 - Two recovery actions: **Try again** (resets error state in memory) and **Reload page** (`window.location.reload()`).
@@ -73,15 +75,15 @@ apps/web/
 
 ## 3. Verification Commands and Results
 
-| Check / Command | Status | Output Summary |
-|---|---|---|
-| `pnpm --filter @jmp/web dev` | ✅ PASS | Vite 8 ready in ~280ms on `http://localhost:5173/`, returns 200 OK |
-| `pnpm --filter @jmp/web build` | ✅ PASS | Production build completed in 89ms (`16.28 kB` CSS, `229.88 kB` JS) |
-| `pnpm --filter @jmp/web lint` | ✅ PASS | ESLint exited with 0 warnings and 0 errors |
-| `pnpm --filter @jmp/web typecheck` | ✅ PASS | Strict TypeScript compiler check passed without warnings |
-| `pnpm --filter @jmp/web test` | ✅ PASS | 10 tests passed across 3 test files (`AppShell`, `AppErrorBoundary`, `index`) |
-| `pnpm workspace:check` | ✅ PASS | Workspace structure OK (4 packages; all `workspace:*` references resolve) |
-| `pnpm check` | ✅ PASS | Full monorepo check passed (lint, typecheck, tests) across all packages |
+| Check / Command                    | Status  | Output Summary                                                                |
+| ---------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| `pnpm --filter @jmp/web dev`       | ✅ PASS | Vite 8 ready in ~280ms on `http://localhost:5173/`, returns 200 OK            |
+| `pnpm --filter @jmp/web build`     | ✅ PASS | Production build completed in 89ms (`16.28 kB` CSS, `229.88 kB` JS)           |
+| `pnpm --filter @jmp/web lint`      | ✅ PASS | ESLint exited with 0 warnings and 0 errors                                    |
+| `pnpm --filter @jmp/web typecheck` | ✅ PASS | Strict TypeScript compiler check passed without warnings                      |
+| `pnpm --filter @jmp/web test`      | ✅ PASS | 10 tests passed across 3 test files (`AppShell`, `AppErrorBoundary`, `index`) |
+| `pnpm workspace:check`             | ✅ PASS | Workspace structure OK (4 packages; all `workspace:*` references resolve)     |
+| `pnpm check`                       | ✅ PASS | Full monorepo check passed (lint, typecheck, tests) across all packages       |
 
 ---
 

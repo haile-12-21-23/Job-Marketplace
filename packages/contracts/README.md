@@ -7,6 +7,7 @@ Browser-safe, shared Zod request and response contracts for the Job Marketplace 
 `@jmp/contracts` is the single source of truth for public API shapes consumed by both `@jmp/web` (React/Vite) and `@jmp/api` (Express/Node.js).
 
 ### Browser-Safe Boundary
+
 - **Never import**: Prisma Client, database drivers (`pg`), Express, Node.js built-in modules (`fs`, `path`, etc.), environment variables, secrets, or server-only authorization logic into this package.
 - Public DTOs describe the HTTP API boundary as consumed by web and future mobile clients. They must never directly mirror internal Prisma models or database sequential IDs.
 
@@ -28,6 +29,7 @@ import {
 ### TypeScript Types: Inferred vs. Handwritten
 
 All TypeScript interfaces must be inferred directly from Zod schemas:
+
 - `z.input<typeof schema>` (e.g. `JobSearchQueryInput`): Represents raw, unparsed client input (such as Express `req.query` strings or browser form state).
 - `z.output<typeof schema>` / `z.infer<typeof schema>` (e.g. `JobSearchQueryOutput`): Represents validated, parsed, and coerced output data with defaults applied.
 
@@ -48,12 +50,12 @@ Do not write duplicate TypeScript interfaces for schemas defined in this package
 
 Run from the monorepo root:
 
-| Command | Description |
-|---|---|
-| `pnpm --filter @jmp/contracts build` | Compile TypeScript and emit `.js` and `.d.ts` declarations to `dist/` |
-| `pnpm --filter @jmp/contracts typecheck` | Run strict TypeScript compiler verification without emitting |
-| `pnpm --filter @jmp/contracts lint` | Lint contract source files with ESLint |
-| `pnpm --filter @jmp/contracts test` | Run unit tests with Vitest |
+| Command                                  | Description                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `pnpm --filter @jmp/contracts build`     | Compile TypeScript and emit `.js` and `.d.ts` declarations to `dist/` |
+| `pnpm --filter @jmp/contracts typecheck` | Run strict TypeScript compiler verification without emitting          |
+| `pnpm --filter @jmp/contracts lint`      | Lint contract source files with ESLint                                |
+| `pnpm --filter @jmp/contracts test`      | Run unit tests with Vitest                                            |
 
 ## API Versioning & Compatibility
 

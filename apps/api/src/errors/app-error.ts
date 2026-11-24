@@ -9,12 +9,7 @@ export class AppError extends Error {
   readonly code: string;
   readonly isOperational: boolean;
 
-  constructor(
-    statusCode: number,
-    code: string,
-    message: string,
-    isOperational = true,
-  ) {
+  constructor(statusCode: number, code: string, message: string, isOperational = true) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
