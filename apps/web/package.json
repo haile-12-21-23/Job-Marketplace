@@ -1,0 +1,17 @@
+{
+  "name": "@jmp/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@jmp/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@jmp/config": "workspace:*"
+  }
+}

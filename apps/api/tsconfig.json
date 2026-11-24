@@ -1,0 +1,4 @@
+{
+  "extends": "@jmp/config/typescript/node.json",
+  "include": ["src/**/*.ts"]
+}
