@@ -3,13 +3,14 @@
 **Jira Issue:** [JMP-29 — Configure linting, formatting, environment validation and test tooling](https://hailemariamaddisu21.atlassian.net/browse/JMP-29)  
 **Branch:** `JMP-29-Configure-linting-formatting-environment-validation-and-test-tooling`  
 **Date:** 2026-11-24  
-**Status:** COMPLETE & FULLY VERIFIED  
+**Status:** COMPLETE & FULLY VERIFIED
 
 ---
 
 ## 1. Executive Summary & Preflight Inspection
 
 A full preflight audit of the pnpm monorepo was conducted before applying changes:
+
 - **Inspected Tools & Workspaces:**
   - Workspace packages: `@jmp/config`, `@jmp/contracts`, `@jmp/api`, `@jmp/web`.
   - Pinned runtime versions: Node `>=24.22.0` (active: `v24.22.3`), pnpm `12.17.0`.
@@ -31,24 +32,26 @@ A full preflight audit of the pnpm monorepo was conducted before applying change
 
 ## 2. Jira Acceptance Criteria Verification
 
-| Jira Acceptance Criterion | Status | Evidence / Verification Method |
-| :--- | :---: | :--- |
-| **1. Root lint and format-check scripts work** | **PASS** | `pnpm lint` passed with 0 warnings across all 4 packages.<br>`pnpm format:check` passed with all matched files adhering to Prettier rules. |
-| **2. Strict TypeScript configuration is shared** | **PASS** | All workspace packages extend `@jmp/config/typescript/{node,web}.json`.<br>`pnpm typecheck` passed with 0 errors across `@jmp/config`, `@jmp/contracts`, `@jmp/api`, and `@jmp/web`. |
-| **3. Environment variables are validated at startup** | **PASS** | Validated at API process startup in `server.ts` via `loadEnv()` using Zod (`3.25.76`).<br>Tested with invalid inputs (`PORT=99999`, malformed `DATABASE_URL`); process exited with code 1, logged structured errors, and zero credentials leaked. |
-| **4. Vitest and Supertest execute sample tests** | **PASS** | Vitest executed across all workspace packages: **13 test files passed, 89 tests passed**.<br>Supertest executed 12 tests against pure `createApp()` without live network port or DB requirement (`GET /api/v1` HTTP 200, CORS, 404 problem details, malformed JSON). |
+| Jira Acceptance Criterion                             |  Status  | Evidence / Verification Method                                                                                                                                                                                                                                       |
+| :---------------------------------------------------- | :------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Root lint and format-check scripts work**        | **PASS** | `pnpm lint` passed with 0 warnings across all 4 packages.<br>`pnpm format:check` passed with all matched files adhering to Prettier rules.                                                                                                                           |
+| **2. Strict TypeScript configuration is shared**      | **PASS** | All workspace packages extend `@jmp/config/typescript/{node,web}.json`.<br>`pnpm typecheck` passed with 0 errors across `@jmp/config`, `@jmp/contracts`, `@jmp/api`, and `@jmp/web`.                                                                                 |
+| **3. Environment variables are validated at startup** | **PASS** | Validated at API process startup in `server.ts` via `loadEnv()` using Zod (`3.25.76`).<br>Tested with invalid inputs (`PORT=99999`, malformed `DATABASE_URL`); process exited with code 1, logged structured errors, and zero credentials leaked.                    |
+| **4. Vitest and Supertest execute sample tests**      | **PASS** | Vitest executed across all workspace packages: **13 test files passed, 89 tests passed**.<br>Supertest executed 12 tests against pure `createApp()` without live network port or DB requirement (`GET /api/v1` HTTP 200, CORS, 404 problem details, malformed JSON). |
 
 ---
 
 ## 3. Files Created, Modified, and Deleted
 
 ### 3.1 ESLint & Prettier
+
 - **Created `.prettierrc.json`**: Root Prettier formatting configuration (single quotes, 2 spaces indentation, 100 print width, trailing commas).
 - **Created `.prettierignore`**: Ignores lockfiles (`pnpm-lock.yaml`), build output (`dist/`, `coverage/`), generated Prisma client (`apps/api/src/generated/`), wireframes (`*.html`), and PDFs (`*.pdf`).
 - **Modified `eslint.config.mjs`**: Excluded `**/apps/api/src/generated/**` and scoped rules to TypeScript source files.
 - **Modified `package.json`**: Added `"format": "prettier --write ."` and `"format:check": "prettier --check ."`. Updated `"check"` script to include `pnpm run format:check`.
 
 ### 3.2 Environment Validation & Startup Boundary
+
 - **Created `apps/api/src/config/env.ts`**:
   - Implements `loadEnv(source = process.env): ApiConfig`.
   - Defines `EnvironmentValidationError` carrying sanitized issues array.
@@ -70,6 +73,7 @@ A full preflight audit of the pnpm monorepo was conducted before applying change
 - **Modified `apps/api/package.json`**: Added direct dependency `"zod": "^3.25.76"`.
 
 ### 3.3 Express App Purity & Test Tooling
+
 - **Modified `apps/api/src/app.ts`**:
   - Defined `export interface AppOptions { corsOrigins?: string[]; }`.
   - Converted `createApp(options?: AppOptions)` to be 100% pure with zero `process.env` dependencies.
@@ -78,6 +82,7 @@ A full preflight audit of the pnpm monorepo was conducted before applying change
   - Added test validating pure `createApp({ corsOrigins: [...] })` configuration without `process.env`.
 
 ### 3.4 Documentation
+
 - **Modified `README.md`**: Updated root command documentation table to include Prettier formatting and updated check sequence.
 - **Modified `apps/api/README.md`**: Updated architecture notes to reference `src/config/env.ts`.
 
@@ -85,14 +90,14 @@ A full preflight audit of the pnpm monorepo was conducted before applying change
 
 ## 4. Environment Variables Specification
 
-| Variable Name | Type / Allowed Values | Default Value | Required? | Validation Rules & Redaction Behavior |
-| :--- | :--- | :--- | :---: | :--- |
-| `NODE_ENV` | `'development' \| 'test' \| 'production'` | `'development'` | No | Must match one of the three environment modes. |
-| `PORT` | Integer (`1` - `65535`) | `3000` | No | Coerced from string; rejected if outside valid TCP port range. |
-| `DATABASE_URL` | PostgreSQL connection URL string | None | **Yes** | Must start with `postgresql:` or `postgres:`. Must contain hostname and database name path. **Redacted**: credentials, raw URL, and query parameters are never echoed in error messages. |
-| `CORS_ORIGINS` | Comma-separated list of URLs | `'http://localhost:5173'` | No | Parsed into array of trimmed strings. Must use `http:` or `https:` scheme. |
-| `LOG_LEVEL` | `'fatal' \| 'error' \| 'warn' \| 'info' \| 'debug' \| 'trace' \| 'silent'` | `'info'` | No | Standard Pino log levels. |
-| `SHADOW_DATABASE_URL` | PostgreSQL connection URL string | None | No (Dev only) | Optional shadow database connection URL used by Prisma Migrate during dev migration diffing. |
+| Variable Name         | Type / Allowed Values                                                      | Default Value             |   Required?   | Validation Rules & Redaction Behavior                                                                                                                                                    |
+| :-------------------- | :------------------------------------------------------------------------- | :------------------------ | :-----------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | `'development' \| 'test' \| 'production'`                                  | `'development'`           |      No       | Must match one of the three environment modes.                                                                                                                                           |
+| `PORT`                | Integer (`1` - `65535`)                                                    | `3000`                    |      No       | Coerced from string; rejected if outside valid TCP port range.                                                                                                                           |
+| `DATABASE_URL`        | PostgreSQL connection URL string                                           | None                      |    **Yes**    | Must start with `postgresql:` or `postgres:`. Must contain hostname and database name path. **Redacted**: credentials, raw URL, and query parameters are never echoed in error messages. |
+| `CORS_ORIGINS`        | Comma-separated list of URLs                                               | `'http://localhost:5173'` |      No       | Parsed into array of trimmed strings. Must use `http:` or `https:` scheme.                                                                                                               |
+| `LOG_LEVEL`           | `'fatal' \| 'error' \| 'warn' \| 'info' \| 'debug' \| 'trace' \| 'silent'` | `'info'`                  |      No       | Standard Pino log levels.                                                                                                                                                                |
+| `SHADOW_DATABASE_URL` | PostgreSQL connection URL string                                           | None                      | No (Dev only) | Optional shadow database connection URL used by Prisma Migrate during dev migration diffing.                                                                                             |
 
 ---
 
@@ -129,7 +134,9 @@ When tests import and invoke `createApp()`, no environment parsing occurs, no da
 ## 6. Verification Commands & Exact Results
 
 ### 6.1 Root Monorepo Quality Check (`pnpm check`)
+
 Command: `pnpm check`
+
 ```bash
 $ pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test
 
@@ -160,14 +167,18 @@ Exit code: 0
 ```
 
 ### 6.2 Workspace Structure & Dependency Graph (`pnpm workspace:check`)
+
 Command: `pnpm workspace:check`
+
 ```
 Workspace structure OK (4 packages; all workspace:* references resolve).
 Exit code: 0
 ```
 
 ### 6.3 Focused API Verification (`@jmp/api`)
+
 Command: `pnpm --filter @jmp/api lint && pnpm --filter @jmp/api typecheck && pnpm --filter @jmp/api test && pnpm --filter @jmp/api build`
+
 ```bash
 $ eslint src --max-warnings=0
 $ tsc --noEmit -p tsconfig.json
@@ -186,7 +197,9 @@ Exit code: 0
 ```
 
 ### 6.4 Startup Environment Validation & Security Redaction Checks
+
 **Test A: Invalid TCP Port (`PORT=99999`)**
+
 ```bash
 $ PORT=99999 node apps/api/dist/server.js
 {"level":60,"time":1795525376088,"issues":[{"field":"PORT","message":"PORT must be between 1 and 65535"},{"field":"DATABASE_URL","message":"DATABASE_URL is required"}],"msg":"Environment validation failed — aborting server startup"}
@@ -194,6 +207,7 @@ Exit code: 1
 ```
 
 **Test B: Malformed `DATABASE_URL` with Secret Redaction**
+
 ```bash
 $ DATABASE_URL="postgresql://user:super_secret_password_123@badhost:5432/" node apps/api/dist/server.js
 {"level":60,"time":1795525382153,"issues":[{"field":"DATABASE_URL","message":"DATABASE_URL is missing a database name in the path"}],"msg":"Environment validation failed — aborting server startup"}
@@ -202,13 +216,17 @@ Exit code: 1
 ```
 
 ### 6.5 Compiled Production API Smoke Test
+
 Command: `PORT=3005 pnpm --filter @jmp/api start`
+
 ```bash
 $ node dist/server.js
 {"level":30,"time":1795525350272,"msg":"Database connection established successfully"}
 {"level":30,"time":1795525350273,"port":3005,"msg":"Job Marketplace API listening on port 3005"}
 ```
+
 Endpoint test via curl:
+
 ```bash
 $ curl -i http://localhost:3005/api/v1
 HTTP/1.1 200 OK
@@ -220,7 +238,9 @@ Content-Length: 71
 ```
 
 ### 6.6 Local Development Server Workflow (`pnpm --filter @jmp/api dev`)
+
 Command: `PORT=3006 pnpm --filter @jmp/api dev`
+
 ```bash
 $ tsx watch src/server.ts
 {"level":30,"time":1795525460380,"msg":"Database connection established successfully"}
@@ -243,14 +263,14 @@ $ curl -s http://localhost:3006/api/v1
 
 ## 8. Summary of Canonical Developer Commands
 
-| Purpose | Canonical Command |
-| :--- | :--- |
-| Check all code quality (format, lint, types, tests) | `pnpm check` |
-| Check code formatting without edits | `pnpm format:check` |
-| Format codebase with Prettier | `pnpm format` |
-| Lint all workspace packages | `pnpm lint` |
-| Typecheck all workspace packages | `pnpm typecheck` |
-| Run all workspace test suites | `pnpm test` |
-| Run API in development with watch mode | `pnpm --filter @jmp/api dev` |
-| Build API for production | `pnpm --filter @jmp/api build` |
-| Run compiled API production bundle | `pnpm --filter @jmp/api start` |
+| Purpose                                             | Canonical Command              |
+| :-------------------------------------------------- | :----------------------------- |
+| Check all code quality (format, lint, types, tests) | `pnpm check`                   |
+| Check code formatting without edits                 | `pnpm format:check`            |
+| Format codebase with Prettier                       | `pnpm format`                  |
+| Lint all workspace packages                         | `pnpm lint`                    |
+| Typecheck all workspace packages                    | `pnpm typecheck`               |
+| Run all workspace test suites                       | `pnpm test`                    |
+| Run API in development with watch mode              | `pnpm --filter @jmp/api dev`   |
+| Build API for production                            | `pnpm --filter @jmp/api build` |
+| Run compiled API production bundle                  | `pnpm --filter @jmp/api start` |
