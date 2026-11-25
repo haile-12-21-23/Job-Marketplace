@@ -33,19 +33,19 @@ Commit the generated `pnpm-lock.yaml`. CI and other developers should then use `
 
 ## Root commands
 
-| Command                 | Purpose                                                                                       |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| `pnpm lint`             | Run lint scripts in all workspace packages that define one.                                   |
-| `pnpm typecheck`        | Run TypeScript checks in all workspace packages that define one.                              |
-| `pnpm test`             | Run tests in all workspace packages that define one.                                          |
-| `pnpm check`            | Run format check, lint, typecheck and tests in sequence.                                      |
-| `pnpm format`           | Format supported files with Prettier.                                                         |
-| `pnpm format:check`     | Check formatting without changing files.                                                      |
+| Command                   | Purpose                                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `pnpm lint`             | Run lint scripts in all workspace packages that define one.                                     |
+| `pnpm typecheck`        | Run TypeScript checks in all workspace packages that define one.                                |
+| `pnpm test`             | Run tests in all workspace packages that define one.                                            |
+| `pnpm check`            | Run format check, lint, typecheck and tests in sequence.                                        |
+| `pnpm format`           | Format supported files with Prettier.                                                           |
+| `pnpm format:check`     | Check formatting without changing files.                                                        |
 | `pnpm workspace:check`  | Validate workspace folders and internal `workspace:*` references without installing packages. |
-| `pnpm docker:db:up`     | Start local PostgreSQL 18.7 service in detached mode via Docker Compose.                      |
-| `pnpm docker:db:down`   | Stop local Docker Compose database service (preserves persistent volume).                     |
-| `pnpm docker:db:logs`   | Follow logs from the Docker Compose PostgreSQL service.                                       |
-| `pnpm docker:db:status` | Check container status and health of the Compose PostgreSQL service.                          |
+| `pnpm docker:db:up`     | Start local PostgreSQL 18.7 service in detached mode via Docker Compose.                        |
+| `pnpm docker:db:down`   | Stop local Docker Compose database service (preserves persistent volume).                       |
+| `pnpm docker:db:logs`   | Follow logs from the Docker Compose PostgreSQL service.                                         |
+| `pnpm docker:db:status` | Check container status and health of the Compose PostgreSQL service.                            |
 
 ## Workspace layout
 
@@ -121,5 +121,5 @@ pnpm --filter @jmp/api dev
 
 ## Expected local URLs
 
-Frontend: <http://localhost:5173>
-Backend: <http://localhost:3000>
+Frontend: [http://localhost:5173](http://localhost:5173)
+Backend: [http://localhost:3000](http://localhost:3000)
