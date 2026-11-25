@@ -1,4 +1,6 @@
 import type { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
+import { ZodError } from 'zod';
+import type { ProblemDetailErrorItem } from '@jmp/contracts';
 import { AppError } from '../errors/app-error.js';
 import { logger } from '../observability/logger.js';
 import type { ProblemDetails } from '../types/problem-details.js';
@@ -22,6 +24,7 @@ export const errorHandler: ErrorRequestHandler = (
   let code = 'INTERNAL_SERVER_ERROR';
   let title = 'Internal Server Error';
   let detail = 'An unexpected error occurred. Please try again later.';
+  let errors: ProblemDetailErrorItem[] | undefined;
 
   // ── Body-parser errors ──────────────────────────────────────────────────
   if (isBodyParserError(err)) {
@@ -39,13 +42,45 @@ export const errorHandler: ErrorRequestHandler = (
     logger.warn({ requestId: req.requestId, code }, title);
   }
 
+  // ── Zod validation errors ───────────────────────────────────────────────
+  else if (err instanceof ZodError) {
+    statusCode = 422;
+    code = 'VALIDATION_ERROR';
+    title = 'Unprocessable Entity';
+    detail = 'One or more fields are invalid.';
+    errors = err.issues.map((issue) => {
+      const pointer = issue.path.length > 0 ? `#/${issue.path.join('/')}` : '#';
+      let issueCode = issue.code.toUpperCase();
+      if (issue.code === 'custom') {
+        issueCode = 'INVALID_INPUT';
+      } else if (issue.code === 'unrecognized_keys') {
+        issueCode = 'UNRECOGNIZED_KEYS';
+      } else if (issue.code === 'invalid_type') {
+        issueCode = 'INVALID_TYPE';
+      } else if (issue.code === 'too_small') {
+        issueCode = 'TOO_SMALL';
+      } else if (issue.code === 'too_big') {
+        issueCode = 'TOO_BIG';
+      } else if (issue.code === 'invalid_string') {
+        issueCode = 'INVALID_FORMAT';
+      }
+      return {
+        pointer,
+        code: issueCode,
+        detail: issue.message,
+      };
+    });
+    logger.warn({ requestId: req.requestId, code, statusCode, errors }, detail);
+  }
+
   // ── Operational AppErrors ───────────────────────────────────────────────
   else if (err instanceof AppError) {
     statusCode = err.statusCode;
     code = err.code;
     title = httpStatusTitle(statusCode);
     detail = err.message;
-    logger.warn({ requestId: req.requestId, code, statusCode }, detail);
+    errors = err.errors;
+    logger.warn({ requestId: req.requestId, code, statusCode, errors }, detail);
   }
 
   // ── Unknown / programming errors ────────────────────────────────────────
@@ -62,6 +97,7 @@ export const errorHandler: ErrorRequestHandler = (
     instance: req.path,
     code,
     requestId: req.requestId,
+    ...(errors !== undefined && errors.length > 0 ? { errors } : {}),
   };
 
   res.status(statusCode).type('application/problem+json').json(body);

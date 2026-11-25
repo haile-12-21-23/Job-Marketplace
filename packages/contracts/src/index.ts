@@ -47,3 +47,14 @@ export {
   type JobSearchQueryOutput,
   type JobSearchQuery,
 } from './jobs/job-search.js';
+
+// Auth domain contracts
+export {
+  normalizeEmail,
+  registerRequestSchema,
+  registerResponseDataSchema,
+  registerResponseEnvelopeSchema,
+  type RegisterRequest,
+  type RegisterResponseData,
+  type RegisterResponse,
+} from './auth/index.js';

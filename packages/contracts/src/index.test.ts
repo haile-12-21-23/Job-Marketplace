@@ -14,6 +14,10 @@ import {
   JOB_SEARCH_SORT_VALUES,
   jobSearchSortSchema,
   jobSearchQuerySchema,
+  normalizeEmail,
+  registerRequestSchema,
+  registerResponseDataSchema,
+  registerResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -24,6 +28,9 @@ import {
   type ProblemDetails,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
+  type RegisterRequest,
+  type RegisterResponseData,
+  type RegisterResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -63,6 +70,13 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(jobSearchQuerySchema).toBeDefined();
   });
 
+  it('exports auth domain schemas and normalizer', () => {
+    expect(normalizeEmail).toBeDefined();
+    expect(registerRequestSchema).toBeDefined();
+    expect(registerResponseDataSchema).toBeDefined();
+    expect(registerResponseEnvelopeSchema).toBeDefined();
+  });
+
   it('enforces type compatibility through inferred types', () => {
     const rawInput: JobSearchQueryInput = { page: 1, pageSize: 20 };
     const output: JobSearchQueryOutput = jobSearchQuerySchema.parse(rawInput);
@@ -82,6 +96,18 @@ describe('@jmp/contracts public barrel exports', () => {
       code: 'RESOURCE_NOT_FOUND',
       requestId: 'req_123',
     };
+    const regReq: RegisterRequest = {
+      displayName: 'Jane Doe',
+      email: 'jane@example.com',
+      password: 'Password123!',
+    };
+    const regResData: RegisterResponseData = {
+      id: publicId,
+      displayName: 'Jane Doe',
+      email: 'jane@example.com',
+      emailVerificationRequired: true,
+    };
+    const regRes: RegisterResponse = { data: regResData };
 
     expect(output.page).toBe(1);
     expect(paginationOutput.page).toBe(1);
@@ -89,5 +115,8 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(single.data.page).toBe(1);
     expect(paginated.data[0]?.page).toBe(1);
     expect(problem.status).toBe(404);
+    expect(regReq.displayName).toBe('Jane Doe');
+    expect(regResData.emailVerificationRequired).toBe(true);
+    expect(regRes.data.id).toBe(publicId);
   });
 });

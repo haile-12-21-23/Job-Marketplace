@@ -9,10 +9,12 @@ import { requestId } from './middleware/request-id.js';
 import { notFound } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRootRouter } from './routes/index.js';
+import type { IdentityRouterOptions } from './modules/identity/index.js';
 
 export interface AppOptions {
   corsOrigins?: string[] | undefined;
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
+  identity?: IdentityRouterOptions | undefined;
 }
 
 /**
@@ -48,8 +50,8 @@ export function createApp(options?: AppOptions): express.Application {
         }
         return 'info';
       },
-      // Never log these fields.
-      redact: ['req.headers.authorization', 'req.headers.cookie'],
+      // Never log sensitive credentials.
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password'],
     }),
   );
 
@@ -83,7 +85,12 @@ export function createApp(options?: AppOptions): express.Application {
   app.use(express.json({ limit: '1mb' }));
 
   // ── 7. Routes ────────────────────────────────────────────────────────────
-  app.use(createRootRouter({ checkDatabaseReadiness: options?.checkDatabaseReadiness }));
+  app.use(
+    createRootRouter({
+      checkDatabaseReadiness: options?.checkDatabaseReadiness,
+      identity: options?.identity,
+    }),
+  );
 
   // ── 8. Not-found handler ─────────────────────────────────────────────────
   app.use(notFound);

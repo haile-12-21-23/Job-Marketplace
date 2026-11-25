@@ -1,3 +1,5 @@
+import type { ProblemDetailErrorItem } from '@jmp/contracts';
+
 /**
  * RFC 9457 Problem Details shape, extended with stable application fields.
  * https://www.rfc-editor.org/rfc/rfc9457
@@ -17,4 +19,6 @@ export interface ProblemDetails {
   code: string;
   /** Correlation ID from the request. */
   requestId: string | undefined;
+  /** Optional field-level validation errors. */
+  errors?: ProblemDetailErrorItem[] | undefined;
 }
