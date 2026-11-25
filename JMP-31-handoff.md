@@ -34,11 +34,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -50,23 +50,23 @@ volumes:
 
 ### 2.2 Environment Mapping: `.env.docker` vs. API `DATABASE_URL`
 
-| Setting             | `.env.docker` (Container Definition) | `apps/api/.env` (Host API Consumer)                                           |
-| :------------------ | :------------------------------------- | :------------------------------------------------------------------------------ |
+| Setting       | `.env.docker` (Container Definition) | `apps/api/.env` (Host API Consumer)                                           |
+| :------------ | :----------------------------------- | :---------------------------------------------------------------------------- |
 | **User**      | `POSTGRES_USER=jmp_user`             | `postgresql://jmp_user:...`                                                   |
 | **Password**  | `POSTGRES_PASSWORD=<local_password>` | `postgresql://...:<local_password>@...`                                       |
 | **Database**  | `POSTGRES_DB=jmp_dev`                | `postgresql://.../jmp_dev?schema=public`                                      |
 | **Host Port** | `POSTGRES_PORT=5433`                 | Host connection points to `localhost:5433`                                    |
-| **Full URL**  | N/A                                    | `postgresql://jmp_user:<local_password>@localhost:5433/jmp_dev?schema=public` |
+| **Full URL**  | N/A                                  | `postgresql://jmp_user:<local_password>@localhost:5433/jmp_dev?schema=public` |
 
 ---
 
 ## 3. Operational Health Endpoints Specification
 
-| Endpoint          | Method | Purpose & Database Dependency                                                                                 | Success Status & Response Envelope                                       | Failure Status & RFC 9457 Problem Details                                                                                                                                                                                                                                     |
-| :---------------- | :-----: | :------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/health`       | `GET` | Process health probe. Verifies HTTP server is serving traffic. **No DB query**.                         | **HTTP 200**`{ "data": { "status": "ok", "timestamp": "..." } }` | N/A                                                                                                                                                                                                                                                                           |
-| `/health/live`  | `GET` | Liveness probe for orchestrators (Kubernetes/ECS). Verifies process is not deadlocked. **No DB query**. | **HTTP 200**`{ "data": { "status": "ok" } }`                     | N/A                                                                                                                                                                                                                                                                           |
-| `/health/ready` | `GET` | Readiness probe. Executes bounded `SELECT 1` through Prisma pool to verify DB connectivity.                 | **HTTP 200**`{ "data": { "status": "ready" } }`                  | **HTTP 503** (`Content-Type: application/problem+json`)`{ "type": "about:blank", "title": "Service Unavailable", "status": 503, "code": "SERVICE_NOT_READY", "detail": "Service is not ready to accept traffic", "instance": "/health/ready", "requestId": "..." }` |
+| Endpoint        | Method | Purpose & Database Dependency                                                                           | Success Status & Response Envelope                               | Failure Status & RFC 9457 Problem Details                                                                                                                                                                                                                           |
+| :-------------- | :----: | :------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/health`       | `GET`  | Process health probe. Verifies HTTP server is serving traffic. **No DB query**.                         | **HTTP 200**`{ "data": { "status": "ok", "timestamp": "..." } }` | N/A                                                                                                                                                                                                                                                                 |
+| `/health/live`  | `GET`  | Liveness probe for orchestrators (Kubernetes/ECS). Verifies process is not deadlocked. **No DB query**. | **HTTP 200**`{ "data": { "status": "ok" } }`                     | N/A                                                                                                                                                                                                                                                                 |
+| `/health/ready` | `GET`  | Readiness probe. Executes bounded `SELECT 1` through Prisma pool to verify DB connectivity.             | **HTTP 200**`{ "data": { "status": "ready" } }`                  | **HTTP 503** (`Content-Type: application/problem+json`)`{ "type": "about:blank", "title": "Service Unavailable", "status": 503, "code": "SERVICE_NOT_READY", "detail": "Service is not ready to accept traffic", "instance": "/health/ready", "requestId": "..." }` |
 
 ### Security & Sanitization
 
@@ -78,20 +78,20 @@ volumes:
 
 ## 4. Files Created and Modified
 
-| File                                                    |  Change  | Purpose                                                                                                   |
-| :------------------------------------------------------ | :------: | :-------------------------------------------------------------------------------------------------------- |
-| `compose.yaml`                                        | Created | PostgreSQL 18.7 service, persistent volume, container health check, host port 5433                        |
-| `.env.docker.example`                                 | Created | Template with safe non-production placeholders for local Docker Compose                                   |
-| `apps/api/src/routes/health.ts`                       | Created | Modular router for `/health`, `/health/live`, and `/health/ready`                                   |
-| `apps/api/src/routes/health.test.ts`                  | Created | 6 unit tests verifying all 3 probes, failure states, problem details, and isolation                       |
-| `apps/api/src/infrastructure/database/prisma.ts`      | Modified | Added `checkDatabaseReadiness(timeoutMs)` bounded smoke query                                           |
-| `apps/api/src/infrastructure/database/prisma.test.ts` | Modified | Added readiness check execution test                                                                      |
-| `apps/api/src/routes/index.ts`                        | Modified | Exported `createRootRouter(options)` mounting `/health` at root level                                 |
-| `apps/api/src/app.ts`                                 | Modified | Added `checkDatabaseReadiness` dependency injection seam to `AppOptions`                              |
-| `apps/api/.env.example`                               | Modified | Documented Docker Compose connection on port 5433 and native on port 5432                                 |
+| File                                                  |  Change  | Purpose                                                                                           |
+| :---------------------------------------------------- | :------: | :------------------------------------------------------------------------------------------------ |
+| `compose.yaml`                                        | Created  | PostgreSQL 18.7 service, persistent volume, container health check, host port 5433                |
+| `.env.docker.example`                                 | Created  | Template with safe non-production placeholders for local Docker Compose                           |
+| `apps/api/src/routes/health.ts`                       | Created  | Modular router for `/health`, `/health/live`, and `/health/ready`                                 |
+| `apps/api/src/routes/health.test.ts`                  | Created  | 6 unit tests verifying all 3 probes, failure states, problem details, and isolation               |
+| `apps/api/src/infrastructure/database/prisma.ts`      | Modified | Added `checkDatabaseReadiness(timeoutMs)` bounded smoke query                                     |
+| `apps/api/src/infrastructure/database/prisma.test.ts` | Modified | Added readiness check execution test                                                              |
+| `apps/api/src/routes/index.ts`                        | Modified | Exported `createRootRouter(options)` mounting `/health` at root level                             |
+| `apps/api/src/app.ts`                                 | Modified | Added `checkDatabaseReadiness` dependency injection seam to `AppOptions`                          |
+| `apps/api/.env.example`                               | Modified | Documented Docker Compose connection on port 5433 and native on port 5432                         |
 | `package.json`                                        | Modified | Added convenience scripts: `docker:db:up`, `docker:db:down`, `docker:db:logs`, `docker:db:status` |
-| `README.md`                                           | Modified | Documented local Docker Compose workflow and root script commands                                         |
-| `apps/api/README.md`                                  | Modified | Documented local database options (Docker vs native) and operational health probes                        |
+| `README.md`                                           | Modified | Documented local Docker Compose workflow and root script commands                                 |
+| `apps/api/README.md`                                  | Modified | Documented local database options (Docker vs native) and operational health probes                |
 
 ---
 

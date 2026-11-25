@@ -1,0 +1,126 @@
+name: CI
+
+'on':
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18.7-bookworm
+        env:
+          POSTGRES_USER: jmp_ci
+          POSTGRES_PASSWORD: jmp_ci_password
+          POSTGRES_DB: jmp_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jmp_ci -d jmp_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
+
+    env:
+      NODE_ENV: test
+      CI: true
+      DATABASE_URL: postgresql://jmp_ci:jmp_ci_password@localhost:5432/jmp_ci?schema=public
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.17.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+          cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
+
+      - name: Print toolchain diagnostics
+        run: |
+          node --version
+          pnpm --version
+          pnpm store path
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate workspace structure
+        run: pnpm run workspace:check
+
+      - name: Verify PostgreSQL service readiness
+        run: |
+          if command -v pg_isready >/dev/null 2>&1; then
+            until pg_isready -h localhost -p 5432 -U jmp_ci -d jmp_ci; do
+              echo "Waiting for PostgreSQL service..."
+              sleep 1
+            done
+          else
+            node -e "
+            const net = require('node:net');
+            const check = () => new Promise((resolve, reject) => {
+              const s = net.connect(5432, 'localhost', () => { s.end(); resolve(); });
+              s.on('error', reject);
+            });
+            (async () => {
+              for (let i = 0; i < 30; i++) {
+                try { await check(); process.exit(0); } catch {}
+                await new Promise(r => setTimeout(r, 1000));
+              }
+              process.exit(1);
+            })();"
+          fi
+          echo "PostgreSQL service is accepting connections."
+
+      - name: Apply database migrations
+        run: pnpm --filter @jmp/api db:migrate:deploy
+
+      - name: Generate Prisma client
+        run: pnpm --filter @jmp/api db:generate
+
+      - name: Check code formatting
+        run: pnpm run format:check
+
+      - name: Run linter
+        run: pnpm run lint
+
+      - name: Run typecheck
+        run: pnpm run typecheck
+
+      - name: Run test suites
+        run: pnpm run test
+
+      - name: Build @jmp/contracts package
+        run: pnpm --filter @jmp/contracts run build
+
+      - name: Build @jmp/api package
+        run: pnpm --filter @jmp/api run build
+
+      - name: Build @jmp/web package
+        run: pnpm --filter @jmp/web run build
+
+      - name: Verify compiled API artifact resolution
+        run: node -e "import('./apps/api/dist/app.js').then(() => console.log('Compiled API app resolved @jmp/contracts successfully.'))"

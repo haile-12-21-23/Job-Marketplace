@@ -33,19 +33,19 @@ Commit the generated `pnpm-lock.yaml`. CI and other developers should then use `
 
 ## Root commands
 
-| Command                   | Purpose                                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------------------------- |
-| `pnpm lint`             | Run lint scripts in all workspace packages that define one.                                     |
-| `pnpm typecheck`        | Run TypeScript checks in all workspace packages that define one.                                |
-| `pnpm test`             | Run tests in all workspace packages that define one.                                            |
-| `pnpm check`            | Run format check, lint, typecheck and tests in sequence.                                        |
-| `pnpm format`           | Format supported files with Prettier.                                                           |
-| `pnpm format:check`     | Check formatting without changing files.                                                        |
+| Command                 | Purpose                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm lint`             | Run lint scripts in all workspace packages that define one.                                   |
+| `pnpm typecheck`        | Run TypeScript checks in all workspace packages that define one.                              |
+| `pnpm test`             | Run tests in all workspace packages that define one.                                          |
+| `pnpm check`            | Run format check, lint, typecheck and tests in sequence.                                      |
+| `pnpm format`           | Format supported files with Prettier.                                                         |
+| `pnpm format:check`     | Check formatting without changing files.                                                      |
 | `pnpm workspace:check`  | Validate workspace folders and internal `workspace:*` references without installing packages. |
-| `pnpm docker:db:up`     | Start local PostgreSQL 18.7 service in detached mode via Docker Compose.                        |
-| `pnpm docker:db:down`   | Stop local Docker Compose database service (preserves persistent volume).                       |
-| `pnpm docker:db:logs`   | Follow logs from the Docker Compose PostgreSQL service.                                         |
-| `pnpm docker:db:status` | Check container status and health of the Compose PostgreSQL service.                            |
+| `pnpm docker:db:up`     | Start local PostgreSQL 18.7 service in detached mode via Docker Compose.                      |
+| `pnpm docker:db:down`   | Stop local Docker Compose database service (preserves persistent volume).                     |
+| `pnpm docker:db:logs`   | Follow logs from the Docker Compose PostgreSQL service.                                       |
+| `pnpm docker:db:status` | Check container status and health of the Compose PostgreSQL service.                          |
 
 ## Workspace layout
 
@@ -123,3 +123,83 @@ pnpm --filter @jmp/api dev
 
 Frontend: [http://localhost:5173](http://localhost:5173)
 Backend: [http://localhost:3000](http://localhost:3000)
+
+## Continuous Integration (CI)
+
+A GitHub Actions workflow is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) to validate every pull request and push to the primary branch.
+
+### Triggers
+
+- **Pull Requests:** Any pull request targeting the `master` branch.
+- **Pushes:** Direct commits pushed to `master`.
+- **Manual:** Can be triggered on-demand via `workflow_dispatch`.
+
+Runs on superseded branches or pull requests are automatically cancelled via concurrency controls.
+
+### Supported Toolchain
+
+- **Node.js:** `24.22.3` (installed via `actions/setup-node`)
+- **pnpm:** `12.17.0` (installed via `pnpm/action-setup`)
+
+### Checks Performed in CI
+
+1. **Toolchain Diagnostics:** Prints active `node`, `pnpm`, and pnpm store path versions.
+2. **Deterministic Installation:** Executes `pnpm install --frozen-lockfile` with lockfile-based caching (`pnpm-lock.yaml`).
+3. **Workspace Integrity:** Runs `pnpm run workspace:check` (`scripts/check-workspace.mjs`) to verify package declarations and internal workspace dependencies.
+4. **Database Service Readiness & Migrations:**
+   - Waits for ephemeral PostgreSQL 18.7 service container readiness (`pg_isready`).
+   - Deploys database migrations via `pnpm --filter @jmp/api db:migrate:deploy` against the ephemeral database.
+   - Generates Prisma 7 client via `pnpm --filter @jmp/api db:generate`.
+5. **Quality Checks:**
+   - Code formatting validation via `pnpm run format:check` (`prettier --check .`).
+   - Monorepo linting via `pnpm run lint` (`eslint src --max-warnings=0`).
+   - Monorepo TypeScript typechecking via `pnpm run typecheck` (`tsc --noEmit`).
+   - Test suites execution across all packages via `pnpm run test` (`vitest run --passWithNoTests`).
+6. **Production Package Builds:**
+   - Shared contracts build: `pnpm --filter @jmp/contracts run build` (`tsc -p tsconfig.build.json`).
+   - API service build: `pnpm --filter @jmp/api run build` (`pnpm db:generate && tsc -p tsconfig.build.json`).
+   - Web application build: `pnpm --filter @jmp/web run build` (`tsc --noEmit && vite build`).
+7. **Production Artifact Resolution Verification:** Tests that compiled API artifacts properly resolve built `@jmp/contracts` outputs (`dist/index.js`).
+
+### Ephemeral PostgreSQL Service & Database Isolation
+
+CI provisions an isolated GitHub Actions service container running official `postgres:18.7-bookworm` with fixed test-only credentials (`jmp_ci` / `jmp_ci_password` on database `jmp_ci`).
+
+- **No Production Secrets:** Ordinary CI workflows require zero production credentials, deployment secrets, or external database access.
+- **Strict Isolation:** The database container runs strictly within the GitHub Actions runner context, exists only for the duration of the job, and is automatically discarded after completion.
+- **Native Host & Local Volume Safety:** Local Docker Compose volumes (`postgres_data`) and native host PostgreSQL databases are never touched or modified.
+
+### Reproducing CI Checks Locally
+
+To replicate the CI pipeline locally, run the following sequence:
+
+```bash
+# 1. Deterministic install
+pnpm install --frozen-lockfile
+
+# 2. Workspace validation
+pnpm workspace:check
+
+# 3. Quality suite (format check, lint, typecheck, tests)
+pnpm check
+# or run individually:
+pnpm run format:check
+pnpm run lint
+pnpm run typecheck
+pnpm run test
+
+# 4. Production builds for all buildable packages
+pnpm --filter @jmp/contracts run build
+pnpm --filter @jmp/api run build
+pnpm --filter @jmp/web run build
+```
+
+### Stable Status Check & Branch Protection Follow-up
+
+- **Stable Check Name:** `build-and-test` (display name: `Build and Test`)
+- **Required Manual GitHub Setting:**
+  1. Navigate to the GitHub repository: **Settings** → **Rules** → **Rulesets** (or **Branches**).
+  2. Create or edit a branch protection rule targeting the default branch (`master`).
+  3. Enable **Require status checks to pass before merging**.
+  4. Search for and select the stable status check: `build-and-test`.
+  5. Save the protection rule.
