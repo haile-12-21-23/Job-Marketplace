@@ -8,10 +8,11 @@ import { logger } from './observability/logger.js';
 import { requestId } from './middleware/request-id.js';
 import { notFound } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { rootRouter } from './routes/index.js';
+import { createRootRouter } from './routes/index.js';
 
 export interface AppOptions {
-  corsOrigins?: string[];
+  corsOrigins?: string[] | undefined;
+  checkDatabaseReadiness?: (() => Promise<void>) | undefined;
 }
 
 /**
@@ -82,7 +83,7 @@ export function createApp(options?: AppOptions): express.Application {
   app.use(express.json({ limit: '1mb' }));
 
   // ── 7. Routes ────────────────────────────────────────────────────────────
-  app.use(rootRouter);
+  app.use(createRootRouter({ checkDatabaseReadiness: options?.checkDatabaseReadiness }));
 
   // ── 8. Not-found handler ─────────────────────────────────────────────────
   app.use(notFound);

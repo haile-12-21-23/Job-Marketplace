@@ -22,6 +22,15 @@ describe('Database connection lifecycle', () => {
     expect(result[0]?.one).toBe(1);
   });
 
+  it('runs checkDatabaseReadiness successfully when database is connected', async () => {
+    if (!process.env['DATABASE_URL']) {
+      return;
+    }
+
+    const { checkDatabaseReadiness } = await import('./prisma.js');
+    await expect(checkDatabaseReadiness(5000)).resolves.not.toThrow();
+  });
+
   it('disconnects cleanly and idempotently', async () => {
     await expect(disconnectDatabase()).resolves.not.toThrow();
     // Repeated call must also be safe

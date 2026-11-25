@@ -3,13 +3,14 @@
 **Jira Issue:** [JMP-30 — React Router, Redux Toolkit and RTK Query](https://hailemariamaddisu21.atlassian.net/browse/JMP-30)  
 **Package:** `@jmp/web`  
 **Date:** 2026-11-24  
-**Status:** COMPLETE & FULLY VERIFIED  
+**Status:** COMPLETE & FULLY VERIFIED
 
 ---
 
 ## 1. Executive Summary & Preflight Inspection
 
 A full preflight audit was conducted on the monorepo and `apps/web` prior to making modifications:
+
 - **Baseline Dependencies Retained:** React `19.1.0`, React DOM `19.1.0`, Vite `8.3.8`, Tailwind CSS `@tailwindcss/vite` `4.1.10`, Vitest `5.1.1`, and `@jmp/contracts` workspace reference.
 - **Architectural Alignment:** Followed `JMP_Architecture_Design_v1.0.pdf` and `JMP_API_Standards_v1.0.pdf`. Retained the existing global `AppErrorBoundary`, `StrictMode`, responsive styling, semantic landmarks, and skip-to-content accessibility.
 - **Scope Discipline:** Implemented React Router v7 Data Mode (`createBrowserRouter`, `RouterProvider`), Redux Toolkit with typed hooks, a shared base RTK Query API, and a live service status demonstration component. **Authentication, session state, route guards, and domain dashboards were strictly kept out of scope.**
@@ -20,11 +21,11 @@ A full preflight audit was conducted on the monorepo and `apps/web` prior to mak
 
 New dependencies added to `apps/web/package.json`:
 
-| Package | Version | Justification & Compatibility |
-| :--- | :---: | :--- |
-| `react-router` | `^7.18.6` | Official React Router v7 package. Provides `createBrowserRouter`, `Outlet`, `NavLink`, and `Link`. Compatible with React 19 (`peerDependencies: >=18`). |
-| `@reduxjs/toolkit` | `^2.15.0` | Official Redux Toolkit including RTK Query (`createApi`, `fetchBaseQuery`). Compatible with React 19 (`peerDependencies: ^18 \|\| ^19`). |
-| `react-redux` | `^9.3.1` | Official React bindings for Redux. Supports `useDispatch.withTypes` and `useSelector.withTypes`. |
+| Package            |  Version  | Justification & Compatibility                                                                                                                           |
+| :----------------- | :-------: | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `react-router`     | `^7.18.6` | Official React Router v7 package. Provides `createBrowserRouter`, `Outlet`, `NavLink`, and `Link`. Compatible with React 19 (`peerDependencies: >=18`). |
+| `@reduxjs/toolkit` | `^2.15.0` | Official Redux Toolkit including RTK Query (`createApi`, `fetchBaseQuery`). Compatible with React 19 (`peerDependencies: ^18 \|\| ^19`).                |
+| `react-redux`      | `^9.3.1`  | Official React bindings for Redux. Supports `useDispatch.withTypes` and `useSelector.withTypes`.                                                        |
 
 Lockfile `pnpm-lock.yaml` was cleanly resolved with zero peer dependency conflicts between React 19 and Redux/Router tooling.
 
@@ -33,6 +34,7 @@ Lockfile `pnpm-lock.yaml` was cleanly resolved with zero peer dependency conflic
 ## 3. Files Created and Modified
 
 ### 3.1 Routing & Layout Hierarchy
+
 - **`apps/web/src/app/router.tsx`**: Defines client routes outside React render using `createBrowserRouter`:
   - `/` -> `PublicLayout` with index route `HomePage`.
   - `/app` -> `AuthenticatedLayout` with index route `AppHomePage` (placeholder).
@@ -44,12 +46,14 @@ Lockfile `pnpm-lock.yaml` was cleanly resolved with zero peer dependency conflic
 - **`apps/web/src/pages/NotFoundPage.tsx`**: Accessible 404 recovery page with a return-to-home button.
 
 ### 3.2 State Management & RTK Query
+
 - **`apps/web/src/app/store.ts`**: Configures Redux store via `configureStore`, mounts `baseApi.reducer` at `[baseApi.reducerPath]`, and registers `baseApi.middleware`. Exports `createAppStore()` factory for test isolation and `RootState`, `AppDispatch`, `AppStore` types.
 - **`apps/web/src/app/hooks.ts`**: Pre-typed `useAppDispatch` and `useAppSelector` hooks using `useDispatch.withTypes<AppDispatch>()` and `useSelector.withTypes<RootState>()`.
 - **`apps/web/src/app/providers.tsx`**: Application provider wrapper composing `<Provider store={...}>` with support for injected test stores.
 - **`apps/web/src/services/base-api.ts`**: Central RTK Query Base API using `fetchBaseQuery`. Implements `getApiBaseUrl()` with trailing slash normalization (default `http://localhost:3000/api/v1`). Defines `getServiceStatus` query hook returning `DataEnvelope<ServiceMetadata>`.
 
 ### 3.3 UI Components & Entry Point
+
 - **`apps/web/src/components/api-status/ApiStatusCard.tsx`**: Component consuming `useGetServiceStatusQuery()` demonstrating all 3 lifecycle states:
   1. **Loading:** Spinner with `role="status"` and accessible text "Connecting to API service...".
   2. **Error:** Alert banner with `role="alert"`, descriptive user-safe error message, and a functional "Retry" button invoking `refetch()`.
@@ -77,11 +81,11 @@ ReactDOM.createRoot(rootElement).render(
 
 ### Route Table
 
-| Path | Layout | Page Component | Purpose |
-| :--- | :--- | :--- | :--- |
-| `/` | `PublicLayout` | `HomePage` | Public homepage with search preview and live RTK Query API status |
-| `/app` | `AuthenticatedLayout` | `AppHomePage` | Candidate & Employer workspace placeholder (unauthenticated in this sprint) |
-| `*` | `PublicLayout` | `NotFoundPage` | Fallback 404 page |
+| Path   | Layout                | Page Component | Purpose                                                                     |
+| :----- | :-------------------- | :------------- | :-------------------------------------------------------------------------- |
+| `/`    | `PublicLayout`        | `HomePage`     | Public homepage with search preview and live RTK Query API status           |
+| `/app` | `AuthenticatedLayout` | `AppHomePage`  | Candidate & Employer workspace placeholder (unauthenticated in this sprint) |
+| `*`    | `PublicLayout`        | `NotFoundPage` | Fallback 404 page                                                           |
 
 ---
 
@@ -90,6 +94,7 @@ ReactDOM.createRoot(rootElement).render(
 ### 5.1 Web Package Quality Verification (`@jmp/web`)
 
 **Commands executed:**
+
 ```bash
 pnpm --filter @jmp/web lint
 pnpm --filter @jmp/web typecheck
@@ -98,6 +103,7 @@ pnpm --filter @jmp/web build
 ```
 
 **Results:**
+
 - **Lint:** ESLint passed with 0 errors and 0 warnings (`--max-warnings=0`).
 - **Typecheck:** TypeScript compiler passed with 0 errors (`tsc --noEmit -p tsconfig.json`).
 - **Test:** Vitest passed **8 test files, 27 tests, 0 failures**:
@@ -114,11 +120,13 @@ pnpm --filter @jmp/web build
 ### 5.2 Monorepo-Wide Verification
 
 **Command executed:**
+
 ```bash
 pnpm workspace:check && pnpm check
 ```
 
 **Summary of Monorepo Quality Check:**
+
 1. `pnpm workspace:check` -> Structure OK (4 packages; all `workspace:*` references resolve).
 2. `pnpm format:check` -> All matched files use Prettier code style!
 3. `pnpm lint` -> 0 errors, 0 warnings across all workspace projects (`@jmp/config`, `@jmp/contracts`, `@jmp/api`, `@jmp/web`).
@@ -134,6 +142,7 @@ pnpm workspace:check && pnpm check
 ## 6. Live Development & Browser Smoke-Test Results
 
 Both servers were started and verified simultaneously:
+
 - **API Server:** `PORT=3006 pnpm --filter @jmp/api start`
   - Output: `Job Marketplace API listening on port 3006`
   - Endpoint verification: `curl -i http://localhost:3006/api/v1` returned HTTP 200 with `{ "data": { "service": "Job Marketplace API", "version": "v1", "status": "ok" } }`.

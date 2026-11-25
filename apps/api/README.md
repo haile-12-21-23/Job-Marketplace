@@ -10,16 +10,48 @@ Backend Express application for the Job Marketplace (JMP) platform.
 
 ## Database Setup
 
-### 1. Create Local Development & Shadow Databases
+### 1. Local Database Options
 
-Connect to your local PostgreSQL instance (e.g. using `psql`) and create a clean database for development and optionally a shadow database for Prisma migration diffing:
+You can run PostgreSQL locally using either the Docker Compose service (recommended, PostgreSQL 18.7 on host port 5433) or a native local PostgreSQL installation (host port 5432).
+
+#### Option A: Docker Compose (PostgreSQL 18.7 on Port 5433 — Recommended)
+
+```bash
+# From repository root:
+cp .env.docker.example .env.docker
+
+# Start PostgreSQL 18.7 in background
+docker compose --env-file .env.docker up -d postgres
+
+# Verify health status
+docker compose --env-file .env.docker ps
+```
+
+Configure `apps/api/.env` with:
+
+```env
+DATABASE_URL=postgresql://jmp_user:replace-with-a-local-only-password@localhost:5433/jmp_dev?schema=public
+```
+
+> [!CAUTION]
+> **Data Persistence:** The Docker service uses a named volume (`postgres_data`) mounted at `/var/lib/postgresql`.
+> Use `docker compose --env-file .env.docker down` to stop the database without losing data.
+> Do NOT use `docker compose down -v` as `-v` permanently deletes the volume.
+
+#### Option B: Native Local PostgreSQL (Port 5432)
+
+Connect to your local PostgreSQL instance (e.g. using `psql`) and create a clean database:
 
 ```bash
 psql -h localhost -U postgres -c "CREATE DATABASE jmp_dev;"
 psql -h localhost -U postgres -c "CREATE DATABASE jmp_shadow;"
 ```
 
-> **Note on Shadow Database:** Prisma Migrate needs a shadow database to detect schema drift when creating migrations. In standard setups where the database user has `CREATEDB` permissions, Prisma creates and drops temporary shadow databases automatically. If your user lacks `CREATEDB` rights, specify `SHADOW_DATABASE_URL` pointing to `jmp_shadow`.
+Configure `apps/api/.env` with:
+
+```env
+DATABASE_URL=postgresql://<user>:<password>@localhost:5432/jmp_dev?schema=public
+```
 
 ### 2. Configure Environment Variables
 
@@ -103,6 +135,9 @@ From the repository root:
 - Base URL: `http://localhost:3000`
 - Service metadata: `GET /`
 - Versioned API base: `GET /api/v1`
+- Process health probe: `GET /health` (Returns HTTP 200 process status with timestamp envelope; no DB dependency)
+- Liveness probe: `GET /health/live` (Returns HTTP 200 without DB query; used by container orchestrators to detect deadlocks)
+- Readiness probe: `GET /health/ready` (Returns HTTP 200 when database connectivity is verified via bounded `SELECT 1`; returns HTTP 503 RFC 9457 Problem Details when DB is unavailable)
 
 ## Architecture & Lifecycle
 
