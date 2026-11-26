@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getApiBaseUrl, baseApi } from './base-api.js';
 import { createAppStore } from '../app/store.js';
+import { setAuthSession } from '../app/auth-slice.js';
 
 describe('baseApi & getApiBaseUrl', () => {
   beforeEach(() => {
@@ -45,5 +46,46 @@ describe('baseApi & getApiBaseUrl', () => {
     expect(result.data).toEqual({
       data: { service: 'Job Marketplace API', version: 'v1', status: 'ok' },
     });
+  });
+
+  it('includes credentials and attaches Bearer access token from in-memory auth state', async () => {
+    let capturedAuthHeader: string | null = null;
+    let capturedCredentials: RequestCredentials | undefined;
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input instanceof Request) {
+        capturedAuthHeader = input.headers.get('Authorization');
+        capturedCredentials = input.credentials;
+      } else {
+        const headers = new Headers(init?.headers);
+        capturedAuthHeader = headers.get('Authorization');
+        capturedCredentials = init?.credentials;
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: { service: 'Job Marketplace API', version: 'v1', status: 'ok' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    const store = createAppStore();
+    store.dispatch(
+      setAuthSession({
+        accessToken: 'in-memory-jwt-token',
+        expiresIn: 900,
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          displayName: 'Abebe',
+          email: 'abebe@example.com',
+        },
+      }),
+    );
+
+    await store.dispatch(baseApi.endpoints.getServiceStatus.initiate());
+
+    expect(capturedCredentials).toBe('include');
+    expect(capturedAuthHeader).toBe('Bearer in-memory-jwt-token');
   });
 });

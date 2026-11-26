@@ -13,6 +13,7 @@ import type { IdentityRouterOptions } from './modules/identity/index.js';
 
 export interface AppOptions {
   corsOrigins?: string[] | undefined;
+  trustProxy?: boolean | undefined;
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
   identity?: IdentityRouterOptions | undefined;
 }
@@ -28,6 +29,11 @@ export interface AppOptions {
  */
 export function createApp(options?: AppOptions): express.Application {
   const app = express();
+
+  // Only honor forwarded IP headers under an explicit trusted-proxy deployment policy.
+  if (options?.trustProxy === true) {
+    app.set('trust proxy', 1);
+  }
 
   // ── 1. Remove X-Powered-By ───────────────────────────────────────────────
   app.disable('x-powered-by');
@@ -50,12 +56,14 @@ export function createApp(options?: AppOptions): express.Application {
         }
         return 'info';
       },
-      // Never log sensitive credentials or verification tokens.
+      // Never log sensitive credentials, auth emails, or tokens.
       redact: [
         'req.headers.authorization',
         'req.headers.cookie',
         'req.body.password',
+        'req.body.email',
         'req.body.token',
+        'req.body.refreshToken',
       ],
     }),
   );

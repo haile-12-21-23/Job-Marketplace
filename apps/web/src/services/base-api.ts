@@ -27,14 +27,29 @@ export function getApiBaseUrl(): string {
   return rawUrl.replace(/\/+$/, '');
 }
 
+interface StoreAuthSliceShape {
+  auth?: {
+    accessToken?: string | null;
+  };
+}
+
 /**
  * Central RTK Query Base API for the Job Marketplace application.
- * All subsequent feature endpoints (jobs, employers, auth) inject into this base API.
+ * Configures credentialed requests (`credentials: 'include'`) for cross-origin localhost
+ * HttpOnly refresh cookies and attaches the in-memory Bearer access token when present.
  */
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
     baseUrl: getApiBaseUrl(),
+    credentials: 'include',
+    prepareHeaders: (headers, { getState }) => {
+      const token = (getState() as StoreAuthSliceShape).auth?.accessToken;
+      if (typeof token === 'string' && token.length > 0) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return headers;
+    },
   }),
   tagTypes: ['ServiceStatus'],
   endpoints: (builder) => ({

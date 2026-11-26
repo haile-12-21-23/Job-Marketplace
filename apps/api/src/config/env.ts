@@ -189,6 +189,39 @@ const emailFromSchema = z
   .email('EMAIL_FROM must be a valid email address')
   .default('no-reply@jobmarketplace.local');
 
+const accessTokenSecretSchema = z
+  .string({
+    required_error: 'AUTH_ACCESS_TOKEN_SECRET is required',
+    invalid_type_error: 'AUTH_ACCESS_TOKEN_SECRET must be a string',
+  })
+  .trim()
+  .min(32, 'AUTH_ACCESS_TOKEN_SECRET must be at least 32 characters');
+
+const nonEmptyLabelSchema = (fieldName: string, defaultValue: string) =>
+  z
+    .string({ invalid_type_error: `${fieldName} must be a string` })
+    .trim()
+    .min(1, `${fieldName} cannot be empty`)
+    .default(defaultValue);
+
+const refreshCookieSameSiteSchema = z
+  .enum(['lax', 'strict', 'none'], {
+    errorMap: () => ({
+      message: 'AUTH_REFRESH_COOKIE_SAME_SITE must be one of: lax, strict, none',
+    }),
+  })
+  .default('lax');
+
+const trustProxySchema = z
+  .union([z.boolean(), z.enum(['true', 'false'])], {
+    errorMap: () => ({
+      message: 'TRUST_PROXY must be a boolean or "true"/"false"',
+    }),
+  })
+  .optional()
+  .default(false)
+  .transform((val) => val === true || val === 'true');
+
 /**
  * Centralized environment schema for @jmp/api.
  */
@@ -237,6 +270,43 @@ export const apiEnvSchema = z
       .string({ invalid_type_error: 'EMAIL_HTTP_API_KEY must be a string' })
       .trim()
       .optional(),
+    AUTH_ACCESS_TOKEN_SECRET: accessTokenSecretSchema,
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: positiveIntSchema(
+      'AUTH_ACCESS_TOKEN_TTL_SECONDS',
+      900,
+      60,
+      3600,
+    ),
+    AUTH_ACCESS_TOKEN_ISSUER: nonEmptyLabelSchema(
+      'AUTH_ACCESS_TOKEN_ISSUER',
+      'job-marketplace-api',
+    ),
+    AUTH_ACCESS_TOKEN_AUDIENCE: nonEmptyLabelSchema(
+      'AUTH_ACCESS_TOKEN_AUDIENCE',
+      'job-marketplace-web',
+    ),
+    AUTH_REFRESH_TOKEN_TTL_DAYS: positiveIntSchema('AUTH_REFRESH_TOKEN_TTL_DAYS', 30, 1, 90),
+    AUTH_REFRESH_COOKIE_SAME_SITE: refreshCookieSameSiteSchema,
+    AUTH_LOGIN_RATE_LIMIT_IP_MAX: positiveIntSchema('AUTH_LOGIN_RATE_LIMIT_IP_MAX', 10, 1, 1000),
+    AUTH_LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS: positiveIntSchema(
+      'AUTH_LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
+    AUTH_LOGIN_RATE_LIMIT_EMAIL_MAX: positiveIntSchema(
+      'AUTH_LOGIN_RATE_LIMIT_EMAIL_MAX',
+      5,
+      1,
+      100,
+    ),
+    AUTH_LOGIN_RATE_LIMIT_EMAIL_WINDOW_SECONDS: positiveIntSchema(
+      'AUTH_LOGIN_RATE_LIMIT_EMAIL_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
+    TRUST_PROXY: trustProxySchema,
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production') {
@@ -264,6 +334,18 @@ export const apiEnvSchema = z
           message: 'EMAIL_HTTP_ENDPOINT must use https: scheme in production',
         });
       }
+    }
+
+    if (
+      data.AUTH_REFRESH_COOKIE_SAME_SITE === 'none' &&
+      (data.NODE_ENV !== 'production' || new URL(data.APP_WEB_URL).protocol !== 'https:')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_REFRESH_COOKIE_SAME_SITE'],
+        message:
+          'AUTH_REFRESH_COOKIE_SAME_SITE="none" requires NODE_ENV="production" with Secure=true and an https: APP_WEB_URL',
+      });
     }
 
     if (data.EMAIL_PROVIDER === 'http') {
@@ -302,6 +384,34 @@ export interface ApiConfig {
   emailFrom: string;
   emailHttpEndpoint?: string | undefined;
   emailHttpApiKey?: string | undefined;
+  authAccessTokenSecret: string;
+  authAccessTokenTtlSeconds: number;
+  authAccessTokenIssuer: string;
+  authAccessTokenAudience: string;
+  authRefreshTokenTtlDays: number;
+  authRefreshCookieSameSite: 'lax' | 'strict' | 'none';
+  authLoginRateLimitIpMax: number;
+  authLoginRateLimitIpWindowSeconds: number;
+  authLoginRateLimitEmailMax: number;
+  authLoginRateLimitEmailWindowSeconds: number;
+  trustProxy: boolean;
+}
+
+/**
+ * Validates only database configuration for DB-only tooling and integration tests.
+ */
+export function loadDatabaseConfig(source: Record<string, string | undefined> = process.env): {
+  databaseUrl: string;
+} {
+  const result = z.object({ DATABASE_URL: databaseUrlSchema }).safeParse(source);
+  if (!result.success) {
+    const issues = result.error.errors.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message,
+    }));
+    throw new EnvironmentValidationError(issues);
+  }
+  return { databaseUrl: result.data.DATABASE_URL };
 }
 
 /**
@@ -342,5 +452,16 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     ...(result.data.EMAIL_HTTP_API_KEY !== undefined
       ? { emailHttpApiKey: result.data.EMAIL_HTTP_API_KEY }
       : {}),
+    authAccessTokenSecret: result.data.AUTH_ACCESS_TOKEN_SECRET,
+    authAccessTokenTtlSeconds: result.data.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+    authAccessTokenIssuer: result.data.AUTH_ACCESS_TOKEN_ISSUER,
+    authAccessTokenAudience: result.data.AUTH_ACCESS_TOKEN_AUDIENCE,
+    authRefreshTokenTtlDays: result.data.AUTH_REFRESH_TOKEN_TTL_DAYS,
+    authRefreshCookieSameSite: result.data.AUTH_REFRESH_COOKIE_SAME_SITE,
+    authLoginRateLimitIpMax: result.data.AUTH_LOGIN_RATE_LIMIT_IP_MAX,
+    authLoginRateLimitIpWindowSeconds: result.data.AUTH_LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS,
+    authLoginRateLimitEmailMax: result.data.AUTH_LOGIN_RATE_LIMIT_EMAIL_MAX,
+    authLoginRateLimitEmailWindowSeconds: result.data.AUTH_LOGIN_RATE_LIMIT_EMAIL_WINDOW_SECONDS,
+    trustProxy: result.data.TRUST_PROXY,
   };
 }

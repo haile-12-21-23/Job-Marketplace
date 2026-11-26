@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type {
+  LoginRequest,
   RegisterRequest,
   ResendVerificationRequest,
   VerifyEmailRequest,
@@ -7,12 +8,16 @@ import type {
 import type { RegisterUserUseCase } from './application/register-user.use-case.js';
 import type { VerifyEmailUseCase } from './application/verify-email.use-case.js';
 import type { ResendVerificationUseCase } from './application/resend-verification.use-case.js';
+import type { LoginUseCase } from './application/login.use-case.js';
+import type { RefreshCookieSpec } from './domain/refresh-token.js';
 
 export class IdentityController {
   constructor(
     private readonly registerUserUseCase: RegisterUserUseCase,
     private readonly verifyEmailUseCase: VerifyEmailUseCase,
     private readonly resendVerificationUseCase: ResendVerificationUseCase,
+    private readonly loginUseCase: LoginUseCase,
+    private readonly refreshCookieSpec: RefreshCookieSpec,
   ) {}
 
   register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -42,6 +47,19 @@ export class IdentityController {
       );
 
       res.status(200).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.loginUseCase.execute(req.body as LoginRequest);
+
+      res
+        .cookie(this.refreshCookieSpec.name, result.refreshToken, this.refreshCookieSpec.options)
+        .status(200)
+        .json({ data: result.response });
     } catch (err) {
       next(err);
     }

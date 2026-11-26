@@ -4,15 +4,15 @@ import { NavLink, Outlet, Link } from 'react-router';
 export default function AuthenticatedLayout(): React.JSX.Element {
   return (
     <div className="flex min-h-screen flex-col bg-[#f8fafc] text-brand-ink">
-      {/* Top Banner clearly identifying this as a future authenticated-area placeholder */}
+      {/* Top Banner clearly identifying client-side UX session scope vs backend RBAC */}
       <div
         role="region"
         aria-label="Placeholder notice"
         className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800"
       >
-        <span className="font-bold">Authenticated Area Placeholder:</span> This area simulates the
-        future candidate & employer workspace. Authentication, sessions, and route guards will be
-        enabled in a future sprint.
+        <span className="font-bold">Authenticated Area Placeholder:</span> Your access token is held
+        in memory only (browser reloads require signing in again until refresh flow in JMP-36;
+        server-side RBAC is enforced in JMP-38).
       </div>
 
       {/* Workspace Header */}
