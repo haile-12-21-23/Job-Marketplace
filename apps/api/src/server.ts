@@ -5,6 +5,7 @@ import { logger } from './observability/logger.js';
 import { connectDatabase, disconnectDatabase } from './infrastructure/database/prisma.js';
 import { loadEnv, EnvironmentValidationError } from './config/env.js';
 import type { ApiConfig } from './config/env.js';
+import { createEmailSender, ResendRateLimiter } from './modules/identity/index.js';
 
 // ── Environment Validation (Startup Boundary) ────────────────────────────────
 let config: ApiConfig;
@@ -29,7 +30,20 @@ logger.level = config.logLevel;
 const PORT = config.port;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const app = createApp({ corsOrigins: config.corsOrigins });
+const app = createApp({
+  corsOrigins: config.corsOrigins,
+  identity: {
+    appWebUrl: config.appWebUrl,
+    emailVerificationTokenTtlMinutes: config.emailVerificationTokenTtlMinutes,
+    emailSender: createEmailSender(config),
+    resendRateLimiter: new ResendRateLimiter({
+      ipMax: config.emailVerificationResendIpMax,
+      ipWindowSeconds: config.emailVerificationResendIpWindowSeconds,
+      emailMax: config.emailVerificationResendEmailMax,
+      emailWindowSeconds: config.emailVerificationResendEmailWindowSeconds,
+    }),
+  },
+});
 const server = http.createServer(app);
 
 // ── Startup ──────────────────────────────────────────────────────────────────

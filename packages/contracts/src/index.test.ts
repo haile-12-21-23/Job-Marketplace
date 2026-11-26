@@ -18,6 +18,12 @@ import {
   registerRequestSchema,
   registerResponseDataSchema,
   registerResponseEnvelopeSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseDataSchema,
+  verifyEmailResponseEnvelopeSchema,
+  resendVerificationRequestSchema,
+  resendVerificationResponseDataSchema,
+  resendVerificationResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -31,6 +37,12 @@ import {
   type RegisterRequest,
   type RegisterResponseData,
   type RegisterResponse,
+  type VerifyEmailRequest,
+  type VerifyEmailResponseData,
+  type VerifyEmailResponse,
+  type ResendVerificationRequest,
+  type ResendVerificationResponseData,
+  type ResendVerificationResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -75,6 +87,12 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(registerRequestSchema).toBeDefined();
     expect(registerResponseDataSchema).toBeDefined();
     expect(registerResponseEnvelopeSchema).toBeDefined();
+    expect(verifyEmailRequestSchema).toBeDefined();
+    expect(verifyEmailResponseDataSchema).toBeDefined();
+    expect(verifyEmailResponseEnvelopeSchema).toBeDefined();
+    expect(resendVerificationRequestSchema).toBeDefined();
+    expect(resendVerificationResponseDataSchema).toBeDefined();
+    expect(resendVerificationResponseEnvelopeSchema).toBeDefined();
   });
 
   it('enforces type compatibility through inferred types', () => {
@@ -108,6 +126,18 @@ describe('@jmp/contracts public barrel exports', () => {
       emailVerificationRequired: true,
     };
     const regRes: RegisterResponse = { data: regResData };
+    const verifyReq: VerifyEmailRequest = { token: 'sample_token' };
+    const verifyResData: VerifyEmailResponseData = {
+      verified: true,
+      message: 'Verified',
+    };
+    const verifyRes: VerifyEmailResponse = { data: verifyResData };
+    const resendReq: ResendVerificationRequest = { email: 'jane@example.com' };
+    const resendResData: ResendVerificationResponseData = {
+      accepted: true,
+      message: 'Accepted',
+    };
+    const resendRes: ResendVerificationResponse = { data: resendResData };
 
     expect(output.page).toBe(1);
     expect(paginationOutput.page).toBe(1);
@@ -118,5 +148,9 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(regReq.displayName).toBe('Jane Doe');
     expect(regResData.emailVerificationRequired).toBe(true);
     expect(regRes.data.id).toBe(publicId);
+    expect(verifyReq.token).toBe('sample_token');
+    expect(verifyRes.data.verified).toBe(true);
+    expect(resendReq.email).toBe('jane@example.com');
+    expect(resendRes.data.accepted).toBe(true);
   });
 });

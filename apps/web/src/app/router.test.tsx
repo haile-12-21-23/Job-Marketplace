@@ -112,4 +112,14 @@ describe('React Router configuration and routes', () => {
     expect(screen.getByLabelText(/email address/i)).toBeDefined();
     expect(screen.getByLabelText(/password/i)).toBeDefined();
   });
+
+  it('renders the email verification page for "/verify-email"', async () => {
+    renderWithRouter('/verify-email');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Verify your email address' }),
+    ).toBeDefined();
+    expect(screen.getByLabelText(/email address/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Send Verification Email' })).toBeDefined();
+  });
 });

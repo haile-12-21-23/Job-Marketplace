@@ -50,8 +50,13 @@ export function createApp(options?: AppOptions): express.Application {
         }
         return 'info';
       },
-      // Never log sensitive credentials.
-      redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password'],
+      // Never log sensitive credentials or verification tokens.
+      redact: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.body.password',
+        'req.body.token',
+      ],
     }),
   );
 

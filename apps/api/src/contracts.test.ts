@@ -4,10 +4,14 @@ import {
   normalizeEmail,
   registerRequestSchema,
   registerResponseDataSchema,
+  resendVerificationRequestSchema,
+  verifyEmailRequestSchema,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type RegisterRequest,
   type RegisterResponseData,
+  type ResendVerificationRequest,
+  type VerifyEmailRequest,
 } from '@jmp/contracts';
 
 describe('@jmp/api -> @jmp/contracts integration', () => {
@@ -90,5 +94,14 @@ describe('@jmp/api -> @jmp/contracts integration', () => {
     const parsed = registerResponseDataSchema.parse(responseDto);
     expect(parsed.id).toBe(responseDto.id);
     expect(parsed.emailVerificationRequired).toBe(true);
+  });
+
+  it('validates email verification and resend contracts', () => {
+    const verifyPayload: VerifyEmailRequest = { token: '  raw_token_abc  ' };
+    expect(verifyEmailRequestSchema.parse(verifyPayload)).toEqual({ token: 'raw_token_abc' });
+
+    const resendPayload: ResendVerificationRequest = { email: '  USER@Example.com  ' };
+    const parsedResend = resendVerificationRequestSchema.parse(resendPayload);
+    expect(normalizeEmail(parsedResend.email)).toBe('user@example.com');
   });
 });

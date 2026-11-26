@@ -124,12 +124,18 @@ export default function RegisterPage(): React.JSX.Element {
             Your account has been created. Email verification is required before accessing protected
             features. Please check your inbox for verification instructions.
           </p>
-          <div className="mt-6">
+          <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               to="/"
               className="inline-flex items-center justify-center rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-[#12263b] transition"
             >
               Back to Home
+            </Link>
+            <Link
+              to="/verify-email"
+              className="inline-flex items-center justify-center rounded-lg border border-brand-line bg-white px-4 py-2 text-sm font-semibold text-brand-navy hover:bg-brand-soft transition"
+            >
+              Resend verification email
             </Link>
           </div>
         </div>
