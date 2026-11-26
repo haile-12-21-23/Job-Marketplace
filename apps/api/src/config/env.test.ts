@@ -11,6 +11,16 @@ describe('loadEnv (Centralized API environment validation)', () => {
       DATABASE_URL: validDbUrl,
       CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
       LOG_LEVEL: 'warn',
+      APP_WEB_URL: 'https://app.example.com/',
+      EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: '120',
+      EMAIL_VERIFICATION_RESEND_IP_MAX: '20',
+      EMAIL_VERIFICATION_RESEND_IP_WINDOW_SECONDS: '600',
+      EMAIL_VERIFICATION_RESEND_EMAIL_MAX: '5',
+      EMAIL_VERIFICATION_RESEND_EMAIL_WINDOW_SECONDS: '1800',
+      EMAIL_PROVIDER: 'http',
+      EMAIL_FROM: 'noreply@example.com',
+      EMAIL_HTTP_ENDPOINT: 'https://mail.example.com/send/',
+      EMAIL_HTTP_API_KEY: 'super-secret-mail-key',
     });
 
     expect(config).toEqual({
@@ -19,6 +29,16 @@ describe('loadEnv (Centralized API environment validation)', () => {
       databaseUrl: validDbUrl,
       corsOrigins: ['https://app.example.com', 'https://admin.example.com'],
       logLevel: 'warn',
+      appWebUrl: 'https://app.example.com',
+      emailVerificationTokenTtlMinutes: 120,
+      emailVerificationResendIpMax: 20,
+      emailVerificationResendIpWindowSeconds: 600,
+      emailVerificationResendEmailMax: 5,
+      emailVerificationResendEmailWindowSeconds: 1800,
+      emailProvider: 'http',
+      emailFrom: 'noreply@example.com',
+      emailHttpEndpoint: 'https://mail.example.com/send',
+      emailHttpApiKey: 'super-secret-mail-key',
     });
   });
 
@@ -32,6 +52,14 @@ describe('loadEnv (Centralized API environment validation)', () => {
     expect(config.corsOrigins).toEqual(['http://localhost:5173']);
     expect(config.logLevel).toBe('info');
     expect(config.databaseUrl).toBe(validDbUrl);
+    expect(config.appWebUrl).toBe('http://localhost:5173');
+    expect(config.emailVerificationTokenTtlMinutes).toBe(60);
+    expect(config.emailVerificationResendIpMax).toBe(10);
+    expect(config.emailVerificationResendIpWindowSeconds).toBe(900);
+    expect(config.emailVerificationResendEmailMax).toBe(3);
+    expect(config.emailVerificationResendEmailWindowSeconds).toBe(900);
+    expect(config.emailProvider).toBe('development');
+    expect(config.emailFrom).toBe('no-reply@jobmarketplace.local');
   });
 
   it('fails fast when required DATABASE_URL is missing', () => {
@@ -153,5 +181,43 @@ describe('loadEnv (Centralized API environment validation)', () => {
       const error = err as EnvironmentValidationError;
       expect(error.issues.length).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('requires EMAIL_HTTP_ENDPOINT and EMAIL_HTTP_API_KEY when EMAIL_PROVIDER is http', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: validDbUrl,
+        EMAIL_PROVIDER: 'http',
+      }),
+    ).toThrowError(EnvironmentValidationError);
+
+    try {
+      loadEnv({
+        DATABASE_URL: validDbUrl,
+        EMAIL_PROVIDER: 'http',
+      });
+      expect.unreachable('Should have thrown');
+    } catch (err) {
+      const error = err as EnvironmentValidationError;
+      const fields = error.issues.map((i) => i.field);
+      expect(fields).toContain('EMAIL_HTTP_ENDPOINT');
+      expect(fields).toContain('EMAIL_HTTP_API_KEY');
+    }
+  });
+
+  it('fails fast when APP_WEB_URL or EMAIL_VERIFICATION_TOKEN_TTL_MINUTES is invalid', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: validDbUrl,
+        APP_WEB_URL: 'ftp://invalid.example.com',
+      }),
+    ).toThrowError('APP_WEB_URL must use http: or https: scheme');
+
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: validDbUrl,
+        EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: '2',
+      }),
+    ).toThrowError('EMAIL_VERIFICATION_TOKEN_TTL_MINUTES must be between 5 and 10080');
   });
 });

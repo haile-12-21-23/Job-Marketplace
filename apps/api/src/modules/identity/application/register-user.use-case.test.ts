@@ -2,8 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { UserStatus } from '../../../generated/prisma/enums.js';
 import { AppError } from '../../../errors/app-error.js';
 import { RegisterUserUseCase } from './register-user.use-case.js';
+import { VerificationEmailIssuer } from './verification-email-issuer.js';
+import { CryptoVerificationTokenService } from '../domain/verification-token.js';
 import type { UserRepository, CreateUserInput, UserRecord } from '../ports/user.repository.js';
 import type { PasswordHasher } from '../domain/password-hasher.js';
+import type { EmailSender, VerificationEmailPayload } from '../ports/email-sender.js';
+import type {
+  ConsumeVerificationTokenOutcome,
+  EmailVerificationTokenRecord,
+  EmailVerificationTokenRepository,
+  IssueVerificationTokenInput,
+} from '../ports/email-verification-token.repository.js';
 
 class InMemoryUserRepository implements UserRepository {
   public users: UserRecord[] = [];
@@ -173,5 +182,61 @@ describe('RegisterUserUseCase', () => {
       passwordHash: 'hashed_ValidPassword123!',
       status: UserStatus.ACTIVE,
     });
+  });
+
+  it('issues a hashed verification token and dispatches a verification email when issuer is configured', async () => {
+    const userRepo = new InMemoryUserRepository();
+    const hasher = new FakePasswordHasher();
+    const tokens: EmailVerificationTokenRecord[] = [];
+    const sentEmails: VerificationEmailPayload[] = [];
+    const now = new Date('2026-11-26T10:00:00Z');
+
+    const tokenRepo: EmailVerificationTokenRepository = {
+      async issueToken(input: IssueVerificationTokenInput): Promise<EmailVerificationTokenRecord> {
+        const record: EmailVerificationTokenRecord = {
+          id: 'tok-1',
+          userId: input.userId,
+          tokenHash: input.tokenHash,
+          expiresAt: input.expiresAt,
+          usedAt: null,
+          createdAt: input.now,
+        };
+        tokens.push(record);
+        return record;
+      },
+      async consumeAndVerifyUser(): Promise<ConsumeVerificationTokenOutcome> {
+        return 'invalid_or_expired';
+      },
+    };
+
+    const emailSender: EmailSender = {
+      async sendVerificationEmail(payload: VerificationEmailPayload): Promise<void> {
+        sentEmails.push(payload);
+      },
+    };
+
+    const issuer = new VerificationEmailIssuer({
+      tokenRepository: tokenRepo,
+      tokenService: new CryptoVerificationTokenService(),
+      emailSender,
+      appWebUrl: 'https://jobs.example.com',
+      tokenTtlMinutes: 60,
+      clock: () => now,
+    });
+
+    const useCase = new RegisterUserUseCase(userRepo, hasher, issuer);
+    const result = await useCase.execute({
+      displayName: 'Abebe Bikila',
+      email: 'abebe@example.com',
+      password: 'StrongPassword123!',
+    });
+
+    expect(result.emailVerificationRequired).toBe(true);
+    expect(tokens).toHaveLength(1);
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0]?.to).toBe('abebe@example.com');
+    expect(sentEmails[0]?.verificationUrl).toContain(
+      'https://jobs.example.com/verify-email?token=',
+    );
   });
 });

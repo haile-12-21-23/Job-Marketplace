@@ -135,15 +135,127 @@ const logLevelSchema = z
   .default('info');
 
 /**
+ * Validates an HTTP(S) URL and strips trailing slashes.
+ */
+function httpUrlSchema(fieldName: string) {
+  return z
+    .string({ invalid_type_error: `${fieldName} must be a string` })
+    .trim()
+    .min(1, `${fieldName} cannot be empty`)
+    .superRefine((val, ctx) => {
+      try {
+        const parsed = new URL(val);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${fieldName} must use http: or https: scheme`,
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${fieldName} must be a valid URL`,
+        });
+      }
+    })
+    .transform((val) => val.replace(/\/+$/, ''));
+}
+
+function positiveIntSchema(fieldName: string, defaultValue: number, min: number, max: number) {
+  return z
+    .union([z.number(), z.string()])
+    .optional()
+    .default(defaultValue)
+    .pipe(
+      z.coerce
+        .number({ invalid_type_error: `${fieldName} must be a valid number` })
+        .int(`${fieldName} must be an integer`)
+        .min(min, `${fieldName} must be between ${min} and ${max}`)
+        .max(max, `${fieldName} must be between ${min} and ${max}`),
+    );
+}
+
+const emailProviderSchema = z
+  .enum(['development', 'http'], {
+    errorMap: () => ({
+      message: 'EMAIL_PROVIDER must be one of: development, http',
+    }),
+  })
+  .default('development');
+
+const emailFromSchema = z
+  .string({ invalid_type_error: 'EMAIL_FROM must be a string' })
+  .trim()
+  .email('EMAIL_FROM must be a valid email address')
+  .default('no-reply@jobmarketplace.local');
+
+/**
  * Centralized environment schema for @jmp/api.
  */
-export const apiEnvSchema = z.object({
-  NODE_ENV: nodeEnvSchema,
-  PORT: portSchema,
-  DATABASE_URL: databaseUrlSchema,
-  CORS_ORIGINS: corsOriginsSchema,
-  LOG_LEVEL: logLevelSchema,
-});
+export const apiEnvSchema = z
+  .object({
+    NODE_ENV: nodeEnvSchema,
+    PORT: portSchema,
+    DATABASE_URL: databaseUrlSchema,
+    CORS_ORIGINS: corsOriginsSchema,
+    LOG_LEVEL: logLevelSchema,
+    APP_WEB_URL: httpUrlSchema('APP_WEB_URL').optional().default('http://localhost:5173'),
+    EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: positiveIntSchema(
+      'EMAIL_VERIFICATION_TOKEN_TTL_MINUTES',
+      60,
+      5,
+      10080,
+    ),
+    EMAIL_VERIFICATION_RESEND_IP_MAX: positiveIntSchema(
+      'EMAIL_VERIFICATION_RESEND_IP_MAX',
+      10,
+      1,
+      1000,
+    ),
+    EMAIL_VERIFICATION_RESEND_IP_WINDOW_SECONDS: positiveIntSchema(
+      'EMAIL_VERIFICATION_RESEND_IP_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
+    EMAIL_VERIFICATION_RESEND_EMAIL_MAX: positiveIntSchema(
+      'EMAIL_VERIFICATION_RESEND_EMAIL_MAX',
+      3,
+      1,
+      100,
+    ),
+    EMAIL_VERIFICATION_RESEND_EMAIL_WINDOW_SECONDS: positiveIntSchema(
+      'EMAIL_VERIFICATION_RESEND_EMAIL_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
+    EMAIL_PROVIDER: emailProviderSchema,
+    EMAIL_FROM: emailFromSchema,
+    EMAIL_HTTP_ENDPOINT: httpUrlSchema('EMAIL_HTTP_ENDPOINT').optional(),
+    EMAIL_HTTP_API_KEY: z
+      .string({ invalid_type_error: 'EMAIL_HTTP_API_KEY must be a string' })
+      .trim()
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.EMAIL_PROVIDER === 'http') {
+      if (!data.EMAIL_HTTP_ENDPOINT) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EMAIL_HTTP_ENDPOINT'],
+          message: 'EMAIL_HTTP_ENDPOINT is required when EMAIL_PROVIDER is "http"',
+        });
+      }
+      if (!data.EMAIL_HTTP_API_KEY || data.EMAIL_HTTP_API_KEY.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EMAIL_HTTP_API_KEY'],
+          message: 'EMAIL_HTTP_API_KEY is required when EMAIL_PROVIDER is "http"',
+        });
+      }
+    }
+  });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
@@ -153,6 +265,16 @@ export interface ApiConfig {
   databaseUrl: string;
   corsOrigins: string[];
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
+  appWebUrl: string;
+  emailVerificationTokenTtlMinutes: number;
+  emailVerificationResendIpMax: number;
+  emailVerificationResendIpWindowSeconds: number;
+  emailVerificationResendEmailMax: number;
+  emailVerificationResendEmailWindowSeconds: number;
+  emailProvider: 'development' | 'http';
+  emailFrom: string;
+  emailHttpEndpoint?: string | undefined;
+  emailHttpApiKey?: string | undefined;
 }
 
 /**
@@ -178,5 +300,20 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     databaseUrl: result.data.DATABASE_URL,
     corsOrigins: result.data.CORS_ORIGINS,
     logLevel: result.data.LOG_LEVEL,
+    appWebUrl: result.data.APP_WEB_URL,
+    emailVerificationTokenTtlMinutes: result.data.EMAIL_VERIFICATION_TOKEN_TTL_MINUTES,
+    emailVerificationResendIpMax: result.data.EMAIL_VERIFICATION_RESEND_IP_MAX,
+    emailVerificationResendIpWindowSeconds: result.data.EMAIL_VERIFICATION_RESEND_IP_WINDOW_SECONDS,
+    emailVerificationResendEmailMax: result.data.EMAIL_VERIFICATION_RESEND_EMAIL_MAX,
+    emailVerificationResendEmailWindowSeconds:
+      result.data.EMAIL_VERIFICATION_RESEND_EMAIL_WINDOW_SECONDS,
+    emailProvider: result.data.EMAIL_PROVIDER,
+    emailFrom: result.data.EMAIL_FROM,
+    ...(result.data.EMAIL_HTTP_ENDPOINT !== undefined
+      ? { emailHttpEndpoint: result.data.EMAIL_HTTP_ENDPOINT }
+      : {}),
+    ...(result.data.EMAIL_HTTP_API_KEY !== undefined
+      ? { emailHttpApiKey: result.data.EMAIL_HTTP_API_KEY }
+      : {}),
   };
 }

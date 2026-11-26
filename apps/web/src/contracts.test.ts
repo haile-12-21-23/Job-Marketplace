@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   jobSearchQuerySchema,
   registerRequestSchema,
+  resendVerificationRequestSchema,
+  verifyEmailRequestSchema,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type DataEnvelope,
   type RegisterRequest,
+  type ResendVerificationRequest,
+  type VerifyEmailRequest,
 } from '@jmp/contracts';
 
 describe('@jmp/web -> @jmp/contracts integration', () => {
@@ -80,5 +84,15 @@ describe('@jmp/web -> @jmp/contracts integration', () => {
     const parsed = registerRequestSchema.parse(formState);
     expect(parsed.displayName).toBe('Hailemariam Addisu');
     expect(parsed.email).toBe('haile@example.com');
+  });
+
+  it('validates verify-email and resend-verification form states against shared contracts', () => {
+    const verifyForm: VerifyEmailRequest = { token: 'raw_token_123' };
+    expect(verifyEmailRequestSchema.parse(verifyForm)).toEqual({ token: 'raw_token_123' });
+
+    const resendForm: ResendVerificationRequest = { email: 'haile@example.com' };
+    expect(resendVerificationRequestSchema.parse(resendForm)).toEqual({
+      email: 'haile@example.com',
+    });
   });
 });

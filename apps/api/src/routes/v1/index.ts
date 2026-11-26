@@ -27,6 +27,8 @@ export function createV1Router(options?: V1RouterOptions): Router {
 
   /**
    * POST /api/v1/auth/register
+   * POST /api/v1/auth/verify-email
+   * POST /api/v1/auth/resend-verification
    * Mount auth domain routes under /auth.
    */
   router.use('/auth', createIdentityRouter(options?.identity));

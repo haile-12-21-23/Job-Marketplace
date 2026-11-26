@@ -1,9 +1,16 @@
 import { baseApi } from './base-api.js';
-import type { RegisterRequest, RegisterResponse } from '@jmp/contracts';
+import type {
+  RegisterRequest,
+  RegisterResponse,
+  ResendVerificationRequest,
+  ResendVerificationResponse,
+  VerifyEmailRequest,
+  VerifyEmailResponse,
+} from '@jmp/contracts';
 
 /**
  * RTK Query endpoints for authentication operations.
- * Injects register mutation into the central baseApi instance.
+ * Injects auth mutations into the central baseApi instance.
  */
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -14,7 +21,22 @@ export const authApi = baseApi.injectEndpoints({
         body,
       }),
     }),
+    verifyEmail: builder.mutation<VerifyEmailResponse, VerifyEmailRequest>({
+      query: (body) => ({
+        url: '/auth/verify-email',
+        method: 'POST',
+        body,
+      }),
+    }),
+    resendVerification: builder.mutation<ResendVerificationResponse, ResendVerificationRequest>({
+      query: (body) => ({
+        url: '/auth/resend-verification',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
 });
 
-export const { useRegisterMutation } = authApi;
+export const { useRegisterMutation, useVerifyEmailMutation, useResendVerificationMutation } =
+  authApi;

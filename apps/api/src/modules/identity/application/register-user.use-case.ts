@@ -3,11 +3,13 @@ import { UserStatus } from '../../../generated/prisma/enums.js';
 import { AppError } from '../../../errors/app-error.js';
 import type { UserRepository } from '../ports/user.repository.js';
 import type { PasswordHasher } from '../domain/password-hasher.js';
+import type { VerificationEmailIssuer } from './verification-email-issuer.js';
 
 export class RegisterUserUseCase {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly passwordHasher: PasswordHasher,
+    private readonly verificationEmailIssuer?: VerificationEmailIssuer | undefined,
   ) {}
 
   async execute(input: RegisterRequest): Promise<RegisterResponseData> {
@@ -44,7 +46,16 @@ export class RegisterUserUseCase {
       status: UserStatus.ACTIVE,
     });
 
-    // 5. Return safe public response DTO; never expose passwords, hashes, or tokens
+    // 5. Issue verification token and send verification email when configured
+    if (this.verificationEmailIssuer) {
+      await this.verificationEmailIssuer.issueAndSend({
+        userId: user.id,
+        email: user.email,
+        displayName: user.displayName,
+      });
+    }
+
+    // 6. Return safe public response DTO; never expose passwords, hashes, or tokens
     return {
       id: user.id,
       displayName: user.displayName,

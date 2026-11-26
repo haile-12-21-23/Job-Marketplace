@@ -5,6 +5,7 @@ import PublicLayout from '../layouts/PublicLayout.js';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout.js';
 import HomePage from '../pages/HomePage.js';
 import RegisterPage from '../pages/RegisterPage.js';
+import VerifyEmailPage from '../pages/VerifyEmailPage.js';
 import AppHomePage from '../pages/AppHomePage.js';
 import NotFoundPage from '../pages/NotFoundPage.js';
 
@@ -20,6 +21,10 @@ export const routes: RouteObject[] = [
       {
         path: 'register',
         element: <RegisterPage />,
+      },
+      {
+        path: 'verify-email',
+        element: <VerifyEmailPage />,
       },
       {
         path: '*',
