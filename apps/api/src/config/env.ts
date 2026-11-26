@@ -239,6 +239,33 @@ export const apiEnvSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.NODE_ENV === 'production') {
+      if (data.EMAIL_PROVIDER !== 'http') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EMAIL_PROVIDER'],
+          message:
+            'EMAIL_PROVIDER must be "http" in production (the development email adapter is not allowed in production)',
+        });
+      }
+
+      if (new URL(data.APP_WEB_URL).protocol !== 'https:') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['APP_WEB_URL'],
+          message: 'APP_WEB_URL must use https: scheme in production',
+        });
+      }
+
+      if (data.EMAIL_HTTP_ENDPOINT && new URL(data.EMAIL_HTTP_ENDPOINT).protocol !== 'https:') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EMAIL_HTTP_ENDPOINT'],
+          message: 'EMAIL_HTTP_ENDPOINT must use https: scheme in production',
+        });
+      }
+    }
+
     if (data.EMAIL_PROVIDER === 'http') {
       if (!data.EMAIL_HTTP_ENDPOINT) {
         ctx.addIssue({

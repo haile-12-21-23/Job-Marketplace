@@ -82,4 +82,70 @@ describe('PrismaEmailVerificationTokenRepository', () => {
       });
     }
   });
+
+  it('serializes concurrent token issuance per user in PostgreSQL so only one active token survives', async () => {
+    if (!process.env['DATABASE_URL']) {
+      return;
+    }
+
+    const prisma = getPrismaClient();
+    const userRepo = new PrismaUserRepository(prisma);
+    const tokenRepo = new PrismaEmailVerificationTokenRepository(prisma);
+    const tokenService = new CryptoVerificationTokenService();
+    const testEmail = `test.concurrent.issue.${Date.now()}@example.com`;
+
+    try {
+      const user = await userRepo.create({
+        displayName: 'Concurrent Issue User',
+        email: testEmail,
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890',
+        status: UserStatus.ACTIVE,
+      });
+
+      const t0 = new Date();
+      const rawA = tokenService.generateToken();
+      const rawB = tokenService.generateToken();
+      const hashA = tokenService.hashToken(rawA);
+      const hashB = tokenService.hashToken(rawB);
+
+      // Start two simultaneous issueToken operations from zero existing token rows
+      await Promise.all([
+        tokenRepo.issueToken({
+          userId: user.id,
+          tokenHash: hashA,
+          expiresAt: new Date(t0.getTime() + 60 * 60_000),
+          now: t0,
+        }),
+        tokenRepo.issueToken({
+          userId: user.id,
+          tokenHash: hashB,
+          expiresAt: new Date(t0.getTime() + 60 * 60_000),
+          now: new Date(t0.getTime() + 1),
+        }),
+      ]);
+
+      const storedTokens = await prisma.emailVerificationToken.findMany({
+        where: { userId: user.id },
+      });
+      const activeTokens = storedTokens.filter((t) => t.usedAt === null);
+      const supersededTokens = storedTokens.filter((t) => t.usedAt !== null);
+
+      expect(storedTokens).toHaveLength(2);
+      expect(activeTokens).toHaveLength(1);
+      expect(supersededTokens).toHaveLength(1);
+
+      const verifyAt = new Date(t0.getTime() + 1000);
+      const survivingHash = activeTokens[0]!.tokenHash;
+      const supersededHash = supersededTokens[0]!.tokenHash;
+
+      expect(await tokenRepo.consumeAndVerifyUser(supersededHash, verifyAt)).toBe(
+        'invalid_or_expired',
+      );
+      expect(await tokenRepo.consumeAndVerifyUser(survivingHash, verifyAt)).toBe('verified');
+    } finally {
+      await prisma.user.deleteMany({
+        where: { email: testEmail },
+      });
+    }
+  });
 });

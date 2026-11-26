@@ -19,14 +19,16 @@ function extractProblemDetails(err: unknown): ProblemDetails | null {
 }
 
 export default function VerifyEmailPage(): React.JSX.Element {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const rawToken = searchParams.get('token')?.trim() ?? '';
+  const hasRawTokenParam = searchParams.has('token');
   const hasToken = rawToken.length > 0;
 
   const [verifyStatus, setVerifyStatus] = useState<VerificationStatus>(
     hasToken ? 'loading' : 'idle',
   );
   const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
+  const capturedTokenRef = useRef<string | null>(hasToken ? rawToken : null);
   const lastSubmittedTokenRef = useRef<string | null>(null);
 
   const [resendEmail, setResendEmail] = useState('');
@@ -36,6 +38,30 @@ export default function VerifyEmailPage(): React.JSX.Element {
 
   const [verifyEmail] = useVerifyEmailMutation();
   const [resendVerification, { isLoading: isResending }] = useResendVerificationMutation();
+
+  useEffect(() => {
+    const existingMeta = document.querySelector<HTMLMetaElement>('meta[name="referrer"]');
+    const previousContent = existingMeta?.getAttribute('content') ?? null;
+    const metaElement = existingMeta ?? document.createElement('meta');
+
+    if (!existingMeta) {
+      metaElement.setAttribute('name', 'referrer');
+      document.head.appendChild(metaElement);
+    }
+    metaElement.setAttribute('content', 'no-referrer');
+
+    return () => {
+      if (existingMeta) {
+        if (previousContent !== null) {
+          existingMeta.setAttribute('content', previousContent);
+        } else {
+          existingMeta.removeAttribute('content');
+        }
+      } else {
+        metaElement.remove();
+      }
+    };
+  }, []);
 
   const submitVerification = useCallback(
     async (token: string) => {
@@ -73,26 +99,36 @@ export default function VerifyEmailPage(): React.JSX.Element {
   );
 
   useEffect(() => {
-    if (!hasToken) {
-      lastSubmittedTokenRef.current = null;
+    if (hasRawTokenParam) {
+      if (hasToken) {
+        capturedTokenRef.current = rawToken;
+      }
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('token');
+      setSearchParams(nextParams, { replace: true });
+    }
+
+    const tokenToSubmit = hasToken ? rawToken : capturedTokenRef.current;
+    if (!tokenToSubmit) {
       setVerifyStatus('idle');
       setVerifyMessage(null);
       return;
     }
 
-    if (lastSubmittedTokenRef.current === rawToken) {
+    if (lastSubmittedTokenRef.current === tokenToSubmit) {
       return;
     }
 
-    lastSubmittedTokenRef.current = rawToken;
-    void submitVerification(rawToken);
-  }, [hasToken, rawToken, submitVerification]);
+    lastSubmittedTokenRef.current = tokenToSubmit;
+    void submitVerification(tokenToSubmit);
+  }, [hasRawTokenParam, hasToken, rawToken, searchParams, setSearchParams, submitVerification]);
 
   const handleRetryVerification = () => {
-    if (!hasToken || verifyStatus === 'loading') {
+    const token = capturedTokenRef.current;
+    if (!token || verifyStatus === 'loading') {
       return;
     }
-    void submitVerification(rawToken);
+    void submitVerification(token);
   };
 
   const handleResendSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

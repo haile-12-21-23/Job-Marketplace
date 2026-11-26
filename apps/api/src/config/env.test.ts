@@ -220,4 +220,65 @@ describe('loadEnv (Centralized API environment validation)', () => {
       }),
     ).toThrowError('EMAIL_VERIFICATION_TOKEN_TTL_MINUTES must be between 5 and 10080');
   });
+
+  it('fails fast in production when EMAIL_PROVIDER is omitted or set to development', () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: validDbUrl,
+        APP_WEB_URL: 'https://app.example.com',
+      }),
+    ).toThrowError(
+      'EMAIL_PROVIDER must be "http" in production (the development email adapter is not allowed in production)',
+    );
+
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: validDbUrl,
+        APP_WEB_URL: 'https://app.example.com',
+        EMAIL_PROVIDER: 'development',
+      }),
+    ).toThrowError(
+      'EMAIL_PROVIDER must be "http" in production (the development email adapter is not allowed in production)',
+    );
+  });
+
+  it('requires https: URLs for APP_WEB_URL and EMAIL_HTTP_ENDPOINT in production', () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: validDbUrl,
+        APP_WEB_URL: 'http://app.example.com',
+        EMAIL_PROVIDER: 'http',
+        EMAIL_HTTP_ENDPOINT: 'https://mail.example.com/send',
+        EMAIL_HTTP_API_KEY: 'secret-key',
+      }),
+    ).toThrowError('APP_WEB_URL must use https: scheme in production');
+
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: validDbUrl,
+        APP_WEB_URL: 'https://app.example.com',
+        EMAIL_PROVIDER: 'http',
+        EMAIL_HTTP_ENDPOINT: 'http://mail.example.com/send',
+        EMAIL_HTTP_API_KEY: 'secret-key',
+      }),
+    ).toThrowError('EMAIL_HTTP_ENDPOINT must use https: scheme in production');
+  });
+
+  it('allows http: URLs and development provider in non-production environments', () => {
+    const devConfig = loadEnv({
+      NODE_ENV: 'development',
+      DATABASE_URL: validDbUrl,
+      APP_WEB_URL: 'http://localhost:5173',
+      EMAIL_PROVIDER: 'http',
+      EMAIL_HTTP_ENDPOINT: 'http://localhost:8025/send',
+      EMAIL_HTTP_API_KEY: 'local-key',
+    });
+
+    expect(devConfig.appWebUrl).toBe('http://localhost:5173');
+    expect(devConfig.emailHttpEndpoint).toBe('http://localhost:8025/send');
+  });
 });

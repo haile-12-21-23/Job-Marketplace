@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import VerifyEmailPage from './VerifyEmailPage.js';
 import { AppProviders } from '../app/providers.js';
 import { createAppStore } from '../app/store.js';
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+}
 
 describe('VerifyEmailPage', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -24,12 +29,13 @@ describe('VerifyEmailPage', () => {
       <AppProviders storeInstance={store}>
         <MemoryRouter initialEntries={[initialEntry]}>
           <VerifyEmailPage />
+          <LocationProbe />
         </MemoryRouter>
       </AppProviders>,
     );
   }
 
-  it('submits token from URL, renders loading then verified success state', async () => {
+  it('submits token from URL, strips token from browser URL immediately, sets no-referrer, and renders verified state', async () => {
     let resolveFetch: (value: Response) => void;
     const deferred = new Promise<Response>((resolve) => {
       resolveFetch = resolve;
@@ -38,12 +44,25 @@ describe('VerifyEmailPage', () => {
     const mockFetch = vi.fn(() => deferred);
     globalThis.fetch = mockFetch;
 
-    renderVerifyPage('/verify-email?token=valid-raw-token-123');
+    renderVerifyPage('/verify-email?token=valid-raw-token-123&source=email');
 
     expect(screen.getByRole('heading', { level: 1, name: 'Verifying your email' })).toBeDefined();
+    expect(document.querySelector('meta[name="referrer"]')?.getAttribute('content')).toBe(
+      'no-referrer',
+    );
+
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('location-probe').textContent).toBe('/verify-email?source=email');
     });
+
+    const fetchCall = mockFetch.mock.calls[0] as unknown as [Request | string, RequestInit?];
+    const requestArg = fetchCall[0];
+    const submittedBody =
+      requestArg instanceof Request
+        ? await requestArg.clone().text()
+        : String(fetchCall[1]?.body ?? '');
+    expect(JSON.parse(submittedBody)).toEqual({ token: 'valid-raw-token-123' });
 
     resolveFetch!(
       new Response(
@@ -60,6 +79,7 @@ describe('VerifyEmailPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Email verified' })).toBeDefined();
     expect(screen.getByText('Your email address has been verified.')).toBeDefined();
     expect(screen.getByRole('link', { name: 'Back to Home' })).toBeDefined();
+    expect(screen.getByTestId('location-probe').textContent).toBe('/verify-email?source=email');
   });
 
   it('shows invalid/expired-token state and resend form when verification fails with 400', async () => {

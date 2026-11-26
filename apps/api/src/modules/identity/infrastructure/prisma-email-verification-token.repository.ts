@@ -23,6 +23,9 @@ export class PrismaEmailVerificationTokenRepository implements EmailVerification
 
   async issueToken(input: IssueVerificationTokenInput): Promise<EmailVerificationTokenRecord> {
     return this.client.$transaction(async (tx) => {
+      // Lock the user row to serialize concurrent token issuance even when no active token rows exist
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId}::uuid FOR UPDATE`;
+
       // Supersede any previously active tokens for this user
       await tx.emailVerificationToken.updateMany({
         where: {
