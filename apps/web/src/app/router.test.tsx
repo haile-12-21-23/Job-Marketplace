@@ -101,4 +101,15 @@ describe('React Router configuration and routes', () => {
       await screen.findByRole('heading', { level: 1, name: 'Work that moves your life forward.' }),
     ).toBeDefined();
   });
+
+  it('renders the registration page for "/register"', async () => {
+    renderWithRouter('/register');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeDefined();
+    expect(screen.getByLabelText(/full name/i)).toBeDefined();
+    expect(screen.getByLabelText(/email address/i)).toBeDefined();
+    expect(screen.getByLabelText(/password/i)).toBeDefined();
+  });
 });

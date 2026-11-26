@@ -61,6 +61,12 @@ export default function PublicLayout(): React.JSX.Element {
 
           {/* User actions / auth placeholders */}
           <div className="flex items-center gap-2">
+            <Link
+              to="/register"
+              className="rounded-lg border border-brand-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-brand-soft transition"
+            >
+              Register
+            </Link>
             <span
               aria-disabled="true"
               title="Authentication enabled in future sprint"

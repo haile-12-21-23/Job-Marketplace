@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { v1Router } from './v1/index.js';
+import { createV1Router, v1Router } from './v1/index.js';
 import { createHealthRouter } from './health.js';
 import { checkDatabaseReadiness } from '../infrastructure/database/prisma.js';
+import type { IdentityRouterOptions } from '../modules/identity/index.js';
 
 export interface RootRouterOptions {
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
+  identity?: IdentityRouterOptions | undefined;
 }
 
 export function createRootRouter(options?: RootRouterOptions): Router {
@@ -32,7 +34,10 @@ export function createRootRouter(options?: RootRouterOptions): Router {
   );
 
   /** Mount version-prefixed product API. */
-  rootRouter.use('/api/v1', v1Router);
+  rootRouter.use(
+    '/api/v1',
+    options?.identity ? createV1Router({ identity: options.identity }) : v1Router,
+  );
 
   return rootRouter;
 }

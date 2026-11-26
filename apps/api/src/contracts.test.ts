@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   jobSearchQuerySchema,
+  normalizeEmail,
+  registerRequestSchema,
+  registerResponseDataSchema,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
+  type RegisterRequest,
+  type RegisterResponseData,
 } from '@jmp/contracts';
 
 describe('@jmp/api -> @jmp/contracts integration', () => {
@@ -59,5 +64,31 @@ describe('@jmp/api -> @jmp/contracts integration', () => {
   it('normalizes countryCode to uppercase', () => {
     const parsed = jobSearchQuerySchema.parse({ countryCode: 'et' });
     expect(parsed.countryCode).toBe('ET');
+  });
+
+  it('validates and normalizes registration request payload', () => {
+    const raw: RegisterRequest = {
+      displayName: '  Abebe Bikila  ',
+      email: '  Abebe@Example.COM  ',
+      password: 'SecurePassword123!',
+    };
+
+    const parsed = registerRequestSchema.parse(raw);
+    expect(parsed.displayName).toBe('Abebe Bikila');
+    expect(parsed.email).toBe('Abebe@Example.COM');
+    expect(normalizeEmail(parsed.email)).toBe('abebe@example.com');
+  });
+
+  it('validates registration response DTO matches public contract', () => {
+    const responseDto: RegisterResponseData = {
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      displayName: 'Abebe Bikila',
+      email: 'abebe@example.com',
+      emailVerificationRequired: true,
+    };
+
+    const parsed = registerResponseDataSchema.parse(responseDto);
+    expect(parsed.id).toBe(responseDto.id);
+    expect(parsed.emailVerificationRequired).toBe(true);
   });
 });

@@ -1,2 +1,4 @@
 # Generated Prisma Client
 src/generated/
+**/node_modules/
+node_modules/

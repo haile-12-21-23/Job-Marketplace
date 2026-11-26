@@ -4,6 +4,7 @@ import type { RouteObject } from 'react-router';
 import PublicLayout from '../layouts/PublicLayout.js';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout.js';
 import HomePage from '../pages/HomePage.js';
+import RegisterPage from '../pages/RegisterPage.js';
 import AppHomePage from '../pages/AppHomePage.js';
 import NotFoundPage from '../pages/NotFoundPage.js';
 
@@ -15,6 +16,10 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <HomePage />,
+      },
+      {
+        path: 'register',
+        element: <RegisterPage />,
       },
       {
         path: '*',

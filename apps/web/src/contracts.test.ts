@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   jobSearchQuerySchema,
+  registerRequestSchema,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type DataEnvelope,
+  type RegisterRequest,
 } from '@jmp/contracts';
 
 describe('@jmp/web -> @jmp/contracts integration', () => {
@@ -66,5 +68,17 @@ describe('@jmp/web -> @jmp/contracts integration', () => {
     };
 
     expect(searchResultPayload.data.countryCode).toBe('ET');
+  });
+
+  it('validates registration form state matches RegisterRequest contract', () => {
+    const formState: RegisterRequest = {
+      displayName: 'Hailemariam Addisu',
+      email: 'haile@example.com',
+      password: 'StrongPassword123!',
+    };
+
+    const parsed = registerRequestSchema.parse(formState);
+    expect(parsed.displayName).toBe('Hailemariam Addisu');
+    expect(parsed.email).toBe('haile@example.com');
   });
 });
