@@ -12,6 +12,8 @@ import type {
   UserRepository,
 } from '../ports/user.repository.js';
 import type {
+  CreateAuthenticatedSessionInput,
+  CreateAuthenticatedSessionResult,
   CreateSessionInput,
   ReplayCheckResult,
   RevokeFamilyResult,
@@ -64,6 +66,7 @@ class InMemoryUserRepo implements UserRepository {
 class InMemorySessionRepo implements SessionRepository {
   public sessions: UserSessionRecord[] = [];
   public shouldFail = false;
+  public forceStaleCredentials = false;
 
   async create(input: CreateSessionInput): Promise<UserSessionRecord> {
     if (this.shouldFail) {
@@ -81,6 +84,16 @@ class InMemorySessionRepo implements SessionRepository {
     };
     this.sessions.push(created);
     return created;
+  }
+
+  async createAuthenticatedSession(
+    input: CreateAuthenticatedSessionInput,
+  ): Promise<CreateAuthenticatedSessionResult> {
+    if (this.forceStaleCredentials) {
+      return { outcome: 'stale_credentials' };
+    }
+    const session = await this.create(input);
+    return { outcome: 'created', session };
   }
 
   async findRotationCandidateByTokenHash(): Promise<SessionRotationCandidate | null> {
@@ -294,6 +307,34 @@ describe('LoginUseCase', () => {
       useCase.execute({ email: 'active@example.com', password: 'Password123!' }),
     ).rejects.toThrowError('Database write failed');
 
+    expect(signSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects login with generic 401 when credentials became stale during session creation', async () => {
+    const now = new Date('2026-11-26T12:00:00Z');
+    const { userRepo, sessionRepo, accessTokenService, useCase } = buildUseCase(now);
+    sessionRepo.forceStaleCredentials = true;
+    const signSpy = vi.spyOn(accessTokenService, 'sign');
+
+    userRepo.users.push({
+      id: 'u-active',
+      displayName: 'Active',
+      email: 'active@example.com',
+      passwordHash: 'hashed_Password123!',
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      useCase.execute({ email: 'active@example.com', password: 'Password123!' }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'INVALID_CREDENTIALS',
+      message: 'Invalid email or password.',
+    });
+    expect(sessionRepo.sessions).toHaveLength(0);
     expect(signSpy).not.toHaveBeenCalled();
   });
 });

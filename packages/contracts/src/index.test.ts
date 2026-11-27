@@ -32,6 +32,12 @@ import {
   refreshResponseEnvelopeSchema,
   logoutResponseDataSchema,
   logoutResponseEnvelopeSchema,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseDataSchema,
+  requestPasswordResetResponseEnvelopeSchema,
+  confirmPasswordResetRequestSchema,
+  confirmPasswordResetResponseDataSchema,
+  confirmPasswordResetResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -59,6 +65,12 @@ import {
   type RefreshResponse,
   type LogoutResponseData,
   type LogoutResponse,
+  type RequestPasswordResetRequest,
+  type RequestPasswordResetResponseData,
+  type RequestPasswordResetResponse,
+  type ConfirmPasswordResetRequest,
+  type ConfirmPasswordResetResponseData,
+  type ConfirmPasswordResetResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -117,6 +129,12 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(refreshResponseEnvelopeSchema).toBeDefined();
     expect(logoutResponseDataSchema).toBeDefined();
     expect(logoutResponseEnvelopeSchema).toBeDefined();
+    expect(requestPasswordResetRequestSchema).toBeDefined();
+    expect(requestPasswordResetResponseDataSchema).toBeDefined();
+    expect(requestPasswordResetResponseEnvelopeSchema).toBeDefined();
+    expect(confirmPasswordResetRequestSchema).toBeDefined();
+    expect(confirmPasswordResetResponseDataSchema).toBeDefined();
+    expect(confirmPasswordResetResponseEnvelopeSchema).toBeDefined();
   });
 
   it('enforces type compatibility through inferred types', () => {
@@ -182,6 +200,21 @@ describe('@jmp/contracts public barrel exports', () => {
     const refreshRes: RefreshResponse = { data: refreshResData };
     const logoutResData: LogoutResponseData = { loggedOut: true };
     const logoutRes: LogoutResponse = { data: logoutResData };
+    const reqReset: RequestPasswordResetRequest = { email: 'jane@example.com' };
+    const reqResetResData: RequestPasswordResetResponseData = {
+      accepted: true,
+      message: 'Accepted',
+    };
+    const reqResetRes: RequestPasswordResetResponse = { data: reqResetResData };
+    const confirmResetReq: ConfirmPasswordResetRequest = {
+      token: 'reset_token',
+      newPassword: 'Password123!',
+    };
+    const confirmResetResData: ConfirmPasswordResetResponseData = {
+      reset: true,
+      message: 'Reset',
+    };
+    const confirmResetRes: ConfirmPasswordResetResponse = { data: confirmResetResData };
 
     expect(output.page).toBe(1);
     expect(paginationOutput.page).toBe(1);
@@ -200,5 +233,9 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(loginRes.data.tokenType).toBe('Bearer');
     expect(refreshRes.data.tokenType).toBe('Bearer');
     expect(logoutRes.data.loggedOut).toBe(true);
+    expect(reqReset.email).toBe('jane@example.com');
+    expect(reqResetRes.data.accepted).toBe(true);
+    expect(confirmResetReq.token).toBe('reset_token');
+    expect(confirmResetRes.data.reset).toBe(true);
   });
 });

@@ -182,4 +182,11 @@ describe('LoginPage', () => {
       expect(screen.getByText('Too many login attempts. Please try again later.')).toBeDefined();
     });
   });
+
+  it('exposes Forgot password? link to /forgot-password', () => {
+    renderLoginPage();
+
+    const forgotLink = screen.getByRole('link', { name: 'Forgot password?' });
+    expect(forgotLink.getAttribute('href')).toBe('/forgot-password');
+  });
 });

@@ -1,7 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import type {
+  ConfirmPasswordResetRequest,
   LoginRequest,
   RegisterRequest,
+  RequestPasswordResetRequest,
   ResendVerificationRequest,
   VerifyEmailRequest,
 } from '@jmp/contracts';
@@ -11,6 +13,8 @@ import type { ResendVerificationUseCase } from './application/resend-verificatio
 import type { LoginUseCase } from './application/login.use-case.js';
 import type { RefreshSessionUseCase } from './application/refresh-session.use-case.js';
 import type { LogoutSessionUseCase } from './application/logout-session.use-case.js';
+import type { RequestPasswordResetUseCase } from './application/request-password-reset.use-case.js';
+import type { ConfirmPasswordResetUseCase } from './application/confirm-password-reset.use-case.js';
 import { extractRefreshCookieToken, type RefreshCookieSpec } from './domain/refresh-token.js';
 
 export class IdentityController {
@@ -21,6 +25,8 @@ export class IdentityController {
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshSessionUseCase: RefreshSessionUseCase,
     private readonly logoutSessionUseCase: LogoutSessionUseCase,
+    private readonly requestPasswordResetUseCase: RequestPasswordResetUseCase,
+    private readonly confirmPasswordResetUseCase: ConfirmPasswordResetUseCase,
     private readonly refreshCookieSpec: RefreshCookieSpec,
   ) {}
 
@@ -116,6 +122,40 @@ export class IdentityController {
         .clearCookie(this.refreshCookieSpec.name, this.refreshCookieSpec.clearOptions)
         .status(200)
         .json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  requestPasswordReset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.set({
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      });
+
+      const result = await this.requestPasswordResetUseCase.execute(
+        req.body as RequestPasswordResetRequest,
+      );
+
+      res.status(202).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  confirmPasswordReset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.set({
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      });
+
+      const result = await this.confirmPasswordResetUseCase.execute(
+        req.body as ConfirmPasswordResetRequest,
+      );
+
+      res.status(200).json({ data: result });
     } catch (err) {
       next(err);
     }

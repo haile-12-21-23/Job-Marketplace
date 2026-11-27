@@ -231,6 +231,7 @@ describe('RegisterUserUseCase', () => {
       async sendVerificationEmail(payload: VerificationEmailPayload): Promise<void> {
         sentEmails.push(payload);
       },
+      async sendPasswordResetEmail(): Promise<void> {},
     };
 
     const issuer = new VerificationEmailIssuer({

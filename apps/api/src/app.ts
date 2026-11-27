@@ -61,6 +61,7 @@ export function createApp(options?: AppOptions): express.Application {
         'req.headers.authorization',
         'req.headers.cookie',
         'req.body.password',
+        'req.body.newPassword',
         'req.body.email',
         'req.body.token',
         'req.body.refreshToken',

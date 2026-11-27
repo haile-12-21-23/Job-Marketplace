@@ -1,11 +1,15 @@
 import { baseApi } from './base-api.js';
 import type {
+  ConfirmPasswordResetRequest,
+  ConfirmPasswordResetResponse,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
   RefreshResponse,
   RegisterRequest,
   RegisterResponse,
+  RequestPasswordResetRequest,
+  RequestPasswordResetResponse,
   ResendVerificationRequest,
   ResendVerificationResponse,
   VerifyEmailRequest,
@@ -61,6 +65,26 @@ export const authApi = baseApi.injectEndpoints({
         credentials: 'include',
       }),
     }),
+    requestPasswordReset: builder.mutation<
+      RequestPasswordResetResponse,
+      RequestPasswordResetRequest
+    >({
+      query: (body) => ({
+        url: '/auth/password-reset/request',
+        method: 'POST',
+        body,
+      }),
+    }),
+    confirmPasswordReset: builder.mutation<
+      ConfirmPasswordResetResponse,
+      ConfirmPasswordResetRequest
+    >({
+      query: (body) => ({
+        url: '/auth/password-reset/confirm',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
 });
 
@@ -71,4 +95,6 @@ export const {
   useLoginMutation,
   useRefreshMutation,
   useLogoutMutation,
+  useRequestPasswordResetMutation,
+  useConfirmPasswordResetMutation,
 } = authApi;

@@ -4,7 +4,11 @@ import { logger } from '../../../observability/logger.js';
 import { ResendVerificationUseCase } from './resend-verification.use-case.js';
 import { VerificationEmailIssuer } from './verification-email-issuer.js';
 import { CryptoVerificationTokenService } from '../domain/verification-token.js';
-import type { EmailSender, VerificationEmailPayload } from '../ports/email-sender.js';
+import type {
+  EmailSender,
+  PasswordResetEmailPayload,
+  VerificationEmailPayload,
+} from '../ports/email-sender.js';
 import type {
   ConsumeVerificationTokenOutcome,
   EmailVerificationTokenRecord,
@@ -75,6 +79,7 @@ class FakeEmailSender implements EmailSender {
     }
     this.sent.push(payload);
   }
+  async sendPasswordResetEmail(_payload: PasswordResetEmailPayload): Promise<void> {}
 }
 
 describe('ResendVerificationUseCase', () => {

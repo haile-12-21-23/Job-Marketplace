@@ -32,6 +32,13 @@ describe('loadEnv (Centralized API environment validation)', () => {
       AUTH_LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS: '600',
       AUTH_LOGIN_RATE_LIMIT_EMAIL_MAX: '4',
       AUTH_LOGIN_RATE_LIMIT_EMAIL_WINDOW_SECONDS: '1200',
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: '45',
+      PASSWORD_RESET_RATE_LIMIT_IP_MAX: '12',
+      PASSWORD_RESET_RATE_LIMIT_IP_WINDOW_SECONDS: '600',
+      PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX: '4',
+      PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS: '1800',
+      PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_MAX: '6',
+      PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_WINDOW_SECONDS: '300',
       TRUST_PROXY: 'true',
     });
 
@@ -61,6 +68,13 @@ describe('loadEnv (Centralized API environment validation)', () => {
       authLoginRateLimitIpWindowSeconds: 600,
       authLoginRateLimitEmailMax: 4,
       authLoginRateLimitEmailWindowSeconds: 1200,
+      passwordResetTokenTtlMinutes: 45,
+      passwordResetRateLimitIpMax: 12,
+      passwordResetRateLimitIpWindowSeconds: 600,
+      passwordResetRateLimitEmailMax: 4,
+      passwordResetRateLimitEmailWindowSeconds: 1800,
+      passwordResetConfirmRateLimitIpMax: 6,
+      passwordResetConfirmRateLimitIpWindowSeconds: 300,
       trustProxy: true,
     });
   });
@@ -94,6 +108,13 @@ describe('loadEnv (Centralized API environment validation)', () => {
     expect(config.authLoginRateLimitIpWindowSeconds).toBe(900);
     expect(config.authLoginRateLimitEmailMax).toBe(5);
     expect(config.authLoginRateLimitEmailWindowSeconds).toBe(900);
+    expect(config.passwordResetTokenTtlMinutes).toBe(30);
+    expect(config.passwordResetRateLimitIpMax).toBe(10);
+    expect(config.passwordResetRateLimitIpWindowSeconds).toBe(900);
+    expect(config.passwordResetRateLimitEmailMax).toBe(3);
+    expect(config.passwordResetRateLimitEmailWindowSeconds).toBe(900);
+    expect(config.passwordResetConfirmRateLimitIpMax).toBe(10);
+    expect(config.passwordResetConfirmRateLimitIpWindowSeconds).toBe(900);
     expect(config.trustProxy).toBe(false);
   });
 

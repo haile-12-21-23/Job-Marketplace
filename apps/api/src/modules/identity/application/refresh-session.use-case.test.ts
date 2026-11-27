@@ -4,6 +4,8 @@ import { AppError } from '../../../errors/app-error.js';
 import { JoseAccessTokenService } from '../domain/access-token.js';
 import { CryptoRefreshTokenService } from '../domain/refresh-token.js';
 import type {
+  CreateAuthenticatedSessionInput,
+  CreateAuthenticatedSessionResult,
   CreateSessionInput,
   ReplayCheckResult,
   RevokeFamilyResult,
@@ -35,6 +37,13 @@ class InMemorySessionRepository implements SessionRepository {
     };
     this.sessions.push(record);
     return record;
+  }
+
+  async createAuthenticatedSession(
+    input: CreateAuthenticatedSessionInput,
+  ): Promise<CreateAuthenticatedSessionResult> {
+    const session = await this.create(input);
+    return { outcome: 'created', session };
   }
 
   async findRotationCandidateByTokenHash(

@@ -6,10 +6,11 @@ export interface VerificationTokenService {
   generateToken(): string;
   hashToken(rawToken: string): string;
   buildVerificationUrl(appWebUrl: string, rawToken: string): string;
+  buildPasswordResetUrl(appWebUrl: string, rawToken: string): string;
 }
 
 /**
- * Cryptographically secure verification token generator and SHA-256 hasher.
+ * Cryptographically secure verification & password-reset token generator and SHA-256 hasher.
  * Raw tokens have 256 bits of CSPRNG entropy; only SHA-256 hex digests are stored.
  */
 export class CryptoVerificationTokenService implements VerificationTokenService {
@@ -30,6 +31,13 @@ export class CryptoVerificationTokenService implements VerificationTokenService 
   buildVerificationUrl(appWebUrl: string, rawToken: string): string {
     const base = appWebUrl.replace(/\/+$/, '');
     const url = new URL(`${base}/verify-email`);
+    url.searchParams.set('token', rawToken);
+    return url.toString();
+  }
+
+  buildPasswordResetUrl(appWebUrl: string, rawToken: string): string {
+    const base = appWebUrl.replace(/\/+$/, '');
+    const url = new URL(`${base}/reset-password`);
     url.searchParams.set('token', rawToken);
     return url.toString();
   }
