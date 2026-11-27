@@ -8,6 +8,7 @@ import {
   verifyEmailRequestSchema,
 } from '@jmp/contracts';
 import { AppError } from '../../errors/app-error.js';
+import { createOriginGuardMiddleware } from '../../middleware/origin-guard.js';
 import { validateBody } from '../../middleware/validate.js';
 import { IdentityController } from './identity.controller.js';
 import { RegisterUserUseCase } from './application/register-user.use-case.js';
@@ -15,6 +16,8 @@ import { VerifyEmailUseCase } from './application/verify-email.use-case.js';
 import { ResendVerificationUseCase } from './application/resend-verification.use-case.js';
 import { VerificationEmailIssuer } from './application/verification-email-issuer.js';
 import { LoginUseCase } from './application/login.use-case.js';
+import { RefreshSessionUseCase } from './application/refresh-session.use-case.js';
+import { LogoutSessionUseCase } from './application/logout-session.use-case.js';
 import { PrismaUserRepository } from './infrastructure/prisma-user.repository.js';
 import { PrismaEmailVerificationTokenRepository } from './infrastructure/prisma-email-verification-token.repository.js';
 import { PrismaSessionRepository } from './infrastructure/prisma-session.repository.js';
@@ -55,6 +58,7 @@ export interface IdentityRouterOptions {
   refreshCookieSameSite?: RefreshCookieSameSite | undefined;
   isProduction?: boolean | undefined;
   appWebUrl?: string | undefined;
+  allowedOrigins?: ReadonlyArray<string> | undefined;
   emailVerificationTokenTtlMinutes?: number | undefined;
   clock?: Clock | undefined;
 }
@@ -167,13 +171,30 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
     refreshTokenTtlDays,
     clock,
   });
+  const refreshSessionUseCase = new RefreshSessionUseCase({
+    sessionRepository,
+    accessTokenService,
+    refreshTokenService,
+    clock,
+  });
+  const logoutSessionUseCase = new LogoutSessionUseCase({
+    sessionRepository,
+    refreshTokenService,
+    clock,
+  });
 
   const controller = new IdentityController(
     registerUserUseCase,
     verifyEmailUseCase,
     resendVerificationUseCase,
     loginUseCase,
+    refreshSessionUseCase,
+    logoutSessionUseCase,
     refreshCookieSpec,
+  );
+
+  const originGuard = createOriginGuardMiddleware(
+    options?.allowedOrigins ?? ['http://localhost:5173'],
   );
 
   const resendRateLimitMessage = 'Too many verification email requests. Please try again later.';
@@ -195,6 +216,8 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
     createEmailRateLimitMiddleware(loginRateLimiter, loginRateLimitMessage),
     controller.login,
   );
+  router.post('/refresh', originGuard, controller.refresh);
+  router.post('/logout', originGuard, controller.logout);
 
   return router;
 }

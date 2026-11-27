@@ -9,6 +9,15 @@ export {
   type LoginUseCaseResult,
 } from './application/login.use-case.js';
 export {
+  RefreshSessionUseCase,
+  type RefreshSessionUseCaseOptions,
+  type RefreshSessionUseCaseResult,
+} from './application/refresh-session.use-case.js';
+export {
+  LogoutSessionUseCase,
+  type LogoutSessionUseCaseOptions,
+} from './application/logout-session.use-case.js';
+export {
   VerificationEmailIssuer,
   type IssueVerificationEmailInput,
   type VerificationEmailIssuerOptions,
@@ -30,7 +39,9 @@ export {
 export {
   CryptoRefreshTokenService,
   buildRefreshCookieSpec,
+  extractRefreshCookieToken,
   type RefreshCookieConfigInput,
+  type RefreshCookieParseResult,
   type RefreshCookieSameSite,
   type RefreshCookieSpec,
   type RefreshTokenService,
@@ -44,6 +55,12 @@ export {
 export {
   type SessionRepository,
   type CreateSessionInput,
+  type ReplayCheckResult,
+  type RevokeFamilyResult,
+  type RotateSessionInput,
+  type RotateSessionResult,
+  type SessionRotationCandidate,
+  type SessionUserEligibility,
   type UserSessionRecord,
 } from './ports/session.repository.js';
 export {

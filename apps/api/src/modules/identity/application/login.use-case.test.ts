@@ -13,7 +13,12 @@ import type {
 } from '../ports/user.repository.js';
 import type {
   CreateSessionInput,
+  ReplayCheckResult,
+  RevokeFamilyResult,
+  RotateSessionInput,
+  RotateSessionResult,
   SessionRepository,
+  SessionRotationCandidate,
   UserSessionRecord,
 } from '../ports/session.repository.js';
 
@@ -76,6 +81,22 @@ class InMemorySessionRepo implements SessionRepository {
     };
     this.sessions.push(created);
     return created;
+  }
+
+  async findRotationCandidateByTokenHash(): Promise<SessionRotationCandidate | null> {
+    return null;
+  }
+
+  async rotateSession(_input: RotateSessionInput): Promise<RotateSessionResult> {
+    return { outcome: 'not_found' };
+  }
+
+  async revokeFamilyIfReplayed(): Promise<ReplayCheckResult> {
+    return { outcome: 'not_found' };
+  }
+
+  async revokeFamilyByTokenHash(): Promise<RevokeFamilyResult> {
+    return { revokedCount: 0, tokenFamilyId: null };
   }
 }
 

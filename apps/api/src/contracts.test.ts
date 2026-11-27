@@ -3,7 +3,9 @@ import {
   jobSearchQuerySchema,
   loginRequestSchema,
   loginResponseDataSchema,
+  logoutResponseEnvelopeSchema,
   normalizeEmail,
+  refreshResponseEnvelopeSchema,
   registerRequestSchema,
   registerResponseDataSchema,
   resendVerificationRequestSchema,
@@ -12,6 +14,8 @@ import {
   type JobSearchQueryOutput,
   type LoginRequest,
   type LoginResponseData,
+  type LogoutResponse,
+  type RefreshResponse,
   type RegisterRequest,
   type RegisterResponseData,
   type ResendVerificationRequest,
@@ -128,5 +132,11 @@ describe('@jmp/api -> @jmp/contracts integration', () => {
       },
     };
     expect(loginResponseDataSchema.parse(loginRes).tokenType).toBe('Bearer');
+
+    const refreshRes: RefreshResponse = { data: loginRes };
+    expect(refreshResponseEnvelopeSchema.parse(refreshRes).data.tokenType).toBe('Bearer');
+
+    const logoutRes: LogoutResponse = { data: { loggedOut: true } };
+    expect(logoutResponseEnvelopeSchema.parse(logoutRes).data.loggedOut).toBe(true);
   });
 });

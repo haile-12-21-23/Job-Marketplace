@@ -7,6 +7,7 @@ import type { IdentityRouterOptions } from '../modules/identity/index.js';
 
 export interface RootRouterOptions {
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
+  corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
 }
 
@@ -36,7 +37,9 @@ export function createRootRouter(options?: RootRouterOptions): Router {
   /** Mount version-prefixed product API. */
   rootRouter.use(
     '/api/v1',
-    options?.identity ? createV1Router({ identity: options.identity }) : v1Router,
+    options?.identity !== undefined || options?.corsOrigins !== undefined
+      ? createV1Router({ corsOrigins: options?.corsOrigins, identity: options?.identity })
+      : v1Router,
   );
 
   return rootRouter;

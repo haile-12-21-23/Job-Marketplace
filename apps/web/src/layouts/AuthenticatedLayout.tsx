@@ -1,7 +1,36 @@
 import React from 'react';
-import { NavLink, Outlet, Link } from 'react-router';
+import { NavLink, Outlet, Link, useNavigate } from 'react-router';
+import { useAppDispatch, useAppSelector } from '../app/hooks.js';
+import { clearAuthSession, selectCurrentUser } from '../app/auth-slice.js';
+import { useLogoutMutation } from '../services/auth-api.js';
 
 export default function AuthenticatedLayout(): React.JSX.Element {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const currentUser = useAppSelector(selectCurrentUser);
+  const [logoutUser, { isLoading: isLoggingOut }] = useLogoutMutation();
+
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    try {
+      await logoutUser().unwrap();
+      dispatch(clearAuthSession());
+      navigate('/login', { replace: true });
+    } catch {
+      dispatch(
+        clearAuthSession({
+          notice:
+            'Your local session was cleared, but we could not confirm server sign-out. Please retry server sign-out or sign in again.',
+          noticeKind: 'logout_error',
+        }),
+      );
+      navigate('/login', { replace: true });
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-[#f8fafc] text-brand-ink">
       {/* Top Banner clearly identifying client-side UX session scope vs backend RBAC */}
@@ -11,8 +40,8 @@ export default function AuthenticatedLayout(): React.JSX.Element {
         className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800"
       >
         <span className="font-bold">Authenticated Area Placeholder:</span> Your access token is held
-        in memory only (browser reloads require signing in again until refresh flow in JMP-36;
-        server-side RBAC is enforced in JMP-38).
+        in memory only and restored on reload via the HttpOnly refresh cookie; server-side RBAC is
+        enforced in JMP-38.
       </div>
 
       {/* Workspace Header */}
@@ -48,12 +77,25 @@ export default function AuthenticatedLayout(): React.JSX.Element {
           </div>
 
           <div className="flex items-center gap-3">
+            {currentUser && (
+              <span className="hidden text-xs font-medium text-brand-muted sm:inline">
+                {currentUser.displayName}
+              </span>
+            )}
             <Link
               to="/"
               className="rounded-lg border border-brand-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy shadow-xs hover:bg-slate-50 transition"
             >
               Back to Public Site
             </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="rounded-lg bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#12263b] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoggingOut ? 'Signing out...' : 'Sign out'}
+            </button>
           </div>
         </div>
       </header>
