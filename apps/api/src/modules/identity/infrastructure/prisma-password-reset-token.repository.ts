@@ -1,10 +1,11 @@
-import { PrismaClient } from '../../../generated/prisma/client.js';
-import { UserStatus } from '../../../generated/prisma/enums.js';
+import { Prisma, PrismaClient } from '../../../generated/prisma/client.js';
+import { OutboxStatus, UserStatus } from '../../../generated/prisma/enums.js';
 import { prisma as lazyPrisma } from '../../../infrastructure/database/prisma.js';
 import type {
   ConsumePasswordResetTokenInput,
   ConsumePasswordResetTokenOutcome,
   IssuePasswordResetTokenInput,
+  IssuePasswordResetTokenWithOutboxInput,
   PasswordResetTokenRecord,
   PasswordResetTokenRepository,
 } from '../ports/password-reset-token.repository.js';
@@ -36,40 +37,88 @@ export class PrismaPasswordResetTokenRepository implements PasswordResetTokenRep
     this.client = client ?? lazyPrisma;
   }
 
-  async issueToken(input: IssuePasswordResetTokenInput): Promise<PasswordResetTokenRecord> {
-    return this.client.$transaction(async (tx) => {
-      // Lock the user row first (consistent lock order: users -> password_reset_tokens)
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId}::uuid FOR UPDATE`;
+  private async issueTokenInTx(
+    tx: Prisma.TransactionClient,
+    input: IssuePasswordResetTokenInput,
+  ): Promise<PasswordResetTokenRecord> {
+    // Lock the user row first (consistent lock order: users -> password_reset_tokens)
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId}::uuid FOR UPDATE`;
 
-      // Supersede any previously active password reset tokens for this user
-      await tx.passwordResetToken.updateMany({
-        where: {
-          userId: input.userId,
-          usedAt: null,
-        },
-        data: {
-          usedAt: input.now,
-        },
-      });
-
-      const created = await tx.passwordResetToken.create({
-        data: {
-          userId: input.userId,
-          tokenHash: input.tokenHash,
-          expiresAt: input.expiresAt,
-          usedAt: null,
-        },
-      });
-
-      return {
-        id: created.id,
-        userId: created.userId,
-        tokenHash: created.tokenHash,
-        expiresAt: created.expiresAt,
-        usedAt: created.usedAt,
-        createdAt: created.createdAt,
-      };
+    // Supersede any previously active password reset tokens for this user
+    await tx.passwordResetToken.updateMany({
+      where: {
+        userId: input.userId,
+        usedAt: null,
+      },
+      data: {
+        usedAt: input.now,
+      },
     });
+
+    const created = await tx.passwordResetToken.create({
+      data: {
+        userId: input.userId,
+        tokenHash: input.tokenHash,
+        expiresAt: input.expiresAt,
+        usedAt: null,
+      },
+    });
+
+    return {
+      id: created.id,
+      userId: created.userId,
+      tokenHash: created.tokenHash,
+      expiresAt: created.expiresAt,
+      usedAt: created.usedAt,
+      createdAt: created.createdAt,
+    };
+  }
+
+  async issueToken(input: IssuePasswordResetTokenInput): Promise<PasswordResetTokenRecord> {
+    return this.client.$transaction(async (tx) => this.issueTokenInTx(tx, input));
+  }
+
+  async issueTokenWithOutbox(
+    input: IssuePasswordResetTokenWithOutboxInput,
+  ): Promise<PasswordResetTokenRecord> {
+    return this.client.$transaction(async (tx) => {
+      const created = await this.issueTokenInTx(tx, input);
+
+      await tx.outboxEvent.create({
+        data: {
+          eventType: input.outboxEvent.eventType,
+          aggregateType: input.outboxEvent.aggregateType,
+          aggregateId: input.outboxEvent.aggregateId,
+          payload: input.outboxEvent.payload as Prisma.InputJsonValue,
+          status: OutboxStatus.PENDING,
+          availableAt: input.now,
+        },
+      });
+
+      return created;
+    });
+  }
+
+  async hasEligibleToken(tokenHash: string, now: Date): Promise<boolean> {
+    const row = await this.client.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: {
+        usedAt: true,
+        expiresAt: true,
+        user: {
+          select: {
+            status: true,
+            emailVerifiedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!row || row.usedAt !== null || row.expiresAt.getTime() <= now.getTime()) {
+      return false;
+    }
+
+    return row.user.status === UserStatus.ACTIVE && row.user.emailVerifiedAt !== null;
   }
 
   async consumeAndResetPassword(

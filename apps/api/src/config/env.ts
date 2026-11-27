@@ -336,6 +336,18 @@ export const apiEnvSchema = z
       1,
       86400,
     ),
+    PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_MAX: positiveIntSchema(
+      'PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_MAX',
+      10,
+      1,
+      1000,
+    ),
+    PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_WINDOW_SECONDS: positiveIntSchema(
+      'PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
     TRUST_PROXY: trustProxySchema,
   })
   .superRefine((data, ctx) => {
@@ -429,6 +441,8 @@ export interface ApiConfig {
   passwordResetRateLimitIpWindowSeconds: number;
   passwordResetRateLimitEmailMax: number;
   passwordResetRateLimitEmailWindowSeconds: number;
+  passwordResetConfirmRateLimitIpMax: number;
+  passwordResetConfirmRateLimitIpWindowSeconds: number;
   trustProxy: boolean;
 }
 
@@ -503,6 +517,9 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     passwordResetRateLimitEmailMax: result.data.PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX,
     passwordResetRateLimitEmailWindowSeconds:
       result.data.PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS,
+    passwordResetConfirmRateLimitIpMax: result.data.PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_MAX,
+    passwordResetConfirmRateLimitIpWindowSeconds:
+      result.data.PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_WINDOW_SECONDS,
     trustProxy: result.data.TRUST_PROXY,
   };
 }

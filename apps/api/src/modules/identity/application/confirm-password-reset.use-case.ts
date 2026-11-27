@@ -27,8 +27,20 @@ export class ConfirmPasswordResetUseCase {
   async execute(input: ConfirmPasswordResetRequest): Promise<ConfirmPasswordResetResponseData> {
     const now = this.clock();
     const tokenHash = this.tokenService.hashToken(input.token);
+
+    // Non-mutating eligibility precheck avoids expensive bcrypt work on invalid/expired tokens
+    const eligible = await this.tokenRepository.hasEligibleToken(tokenHash, now);
+    if (!eligible) {
+      throw new AppError(
+        400,
+        'INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN',
+        'This password reset link is invalid or has expired. Request a new link.',
+      );
+    }
+
     const newPasswordHash = await this.passwordHasher.hash(input.newPassword);
 
+    // Authoritative transactional validation + atomic password update & session revocation closes TOCTOU
     const outcome = await this.tokenRepository.consumeAndResetPassword({
       tokenHash,
       newPasswordHash,

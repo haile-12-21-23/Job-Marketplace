@@ -34,4 +34,32 @@ describe('PasswordResetRateLimiter', () => {
     expect(limiter.checkEmail('abebe@example.com').allowed).toBe(true);
     expect(limiter.checkIp('203.0.113.10').allowed).toBe(true);
   });
+
+  it('enforces independent confirm-endpoint per-IP throttling without sharing request IP budget', () => {
+    let nowMs = new Date('2026-11-27T10:00:00Z').getTime();
+    const limiter = new PasswordResetRateLimiter({
+      ipMax: 2,
+      ipWindowSeconds: 900,
+      confirmIpMax: 3,
+      confirmIpWindowSeconds: 600,
+      clock: () => new Date(nowMs),
+    });
+
+    // Exhaust request IP limit
+    expect(limiter.checkIp('198.51.100.7').allowed).toBe(true);
+    expect(limiter.checkIp('198.51.100.7').allowed).toBe(true);
+    expect(limiter.checkIp('198.51.100.7').allowed).toBe(false);
+
+    // Confirm IP budget remains independent
+    expect(limiter.checkConfirmIp('198.51.100.7').allowed).toBe(true);
+    expect(limiter.checkConfirmIp('198.51.100.7').allowed).toBe(true);
+    expect(limiter.checkConfirmIp('198.51.100.7').allowed).toBe(true);
+
+    const blockedConfirm = limiter.checkConfirmIp('198.51.100.7');
+    expect(blockedConfirm.allowed).toBe(false);
+    expect(blockedConfirm.retryAfterSeconds).toBe(600);
+
+    nowMs += 600_000;
+    expect(limiter.checkConfirmIp('198.51.100.7').allowed).toBe(true);
+  });
 });

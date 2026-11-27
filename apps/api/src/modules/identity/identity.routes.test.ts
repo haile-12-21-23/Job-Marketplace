@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
 import { logger } from '../../observability/logger.js';
-import { UserStatus } from '../../generated/prisma/enums.js';
+import { UserStatus, OutboxStatus } from '../../generated/prisma/enums.js';
 import type {
   UserRepository,
   CreateUserInput,
@@ -31,18 +31,26 @@ import type {
   ConsumePasswordResetTokenInput,
   ConsumePasswordResetTokenOutcome,
   IssuePasswordResetTokenInput,
+  IssuePasswordResetTokenWithOutboxInput,
   PasswordResetTokenRecord,
   PasswordResetTokenRepository,
 } from './ports/password-reset-token.repository.js';
+import type {
+  MarkPasswordResetOutboxRetryInput,
+  PasswordResetOutboxRecord,
+  PasswordResetOutboxRepository,
+} from './ports/password-reset-outbox.repository.js';
 import type {
   EmailSender,
   PasswordResetEmailPayload,
   VerificationEmailPayload,
 } from './ports/email-sender.js';
 import { BcryptPasswordHasher } from './domain/password-hasher.js';
+import { OutboxPayloadCipher } from './domain/outbox-payload-cipher.js';
 import { CryptoVerificationTokenService } from './domain/verification-token.js';
 import { JoseAccessTokenService } from './domain/access-token.js';
 import { CryptoRefreshTokenService } from './domain/refresh-token.js';
+import { PasswordResetOutboxDispatcher } from './application/password-reset-outbox-dispatcher.js';
 import { ResendRateLimiter } from './infrastructure/resend-rate-limiter.js';
 import { LoginRateLimiter } from './infrastructure/login-rate-limiter.js';
 import { PasswordResetRateLimiter } from './infrastructure/password-reset-rate-limiter.js';
@@ -265,6 +273,72 @@ class MockVerificationTokenRepository implements EmailVerificationTokenRepositor
   }
 }
 
+class MockPasswordResetOutboxRepository implements PasswordResetOutboxRepository {
+  public events: PasswordResetOutboxRecord[] = [];
+  private seq = 1;
+
+  enqueue(
+    eventType: string,
+    aggregateType: string,
+    aggregateId: string,
+    payload: unknown,
+    now: Date,
+  ): void {
+    this.events.push({
+      id: `obx-${this.seq++}`,
+      eventType,
+      aggregateType,
+      aggregateId,
+      payload,
+      status: OutboxStatus.PENDING,
+      attempts: 0,
+      availableAt: now,
+      createdAt: now,
+    });
+  }
+
+  async claimPendingBatch(
+    limit: number,
+    now: Date,
+    leaseMs: number,
+  ): Promise<PasswordResetOutboxRecord[]> {
+    const claimed: PasswordResetOutboxRecord[] = [];
+    for (const event of this.events) {
+      if (claimed.length >= limit) break;
+      const due =
+        (event.status === OutboxStatus.PENDING || event.status === OutboxStatus.PROCESSING) &&
+        event.availableAt.getTime() <= now.getTime();
+      if (due) {
+        event.status = OutboxStatus.PROCESSING;
+        event.availableAt = new Date(now.getTime() + leaseMs);
+        claimed.push({ ...event });
+      }
+    }
+    return claimed;
+  }
+
+  async markPublished(id: string): Promise<void> {
+    const event = this.events.find((e) => e.id === id);
+    if (event) {
+      event.status = OutboxStatus.PUBLISHED;
+      event.payload = { redacted: true };
+    }
+  }
+
+  async markRetryOrFailed(input: MarkPasswordResetOutboxRetryInput): Promise<void> {
+    const event = this.events.find((e) => e.id === input.id);
+    if (event) {
+      event.attempts = input.nextAttempts;
+      event.availableAt = input.nextAvailableAt;
+      const terminal = input.nextAttempts >= input.maxAttempts;
+      event.status = terminal ? OutboxStatus.FAILED : OutboxStatus.PENDING;
+      if (terminal) {
+        event.payload = { redacted: true, failed: true };
+      }
+    }
+  }
+}
+
 class MockPasswordResetTokenRepository implements PasswordResetTokenRepository {
   public tokens: PasswordResetTokenRecord[] = [];
   private seq = 1;
@@ -272,6 +346,7 @@ class MockPasswordResetTokenRepository implements PasswordResetTokenRepository {
   constructor(
     private readonly userRepo: MockUserRepository,
     private readonly sessionRepo: MockSessionRepository,
+    private readonly outboxRepo: MockPasswordResetOutboxRepository,
   ) {}
 
   async issueToken(input: IssuePasswordResetTokenInput): Promise<PasswordResetTokenRecord> {
@@ -290,6 +365,29 @@ class MockPasswordResetTokenRepository implements PasswordResetTokenRepository {
     };
     this.tokens.push(created);
     return created;
+  }
+
+  async issueTokenWithOutbox(
+    input: IssuePasswordResetTokenWithOutboxInput,
+  ): Promise<PasswordResetTokenRecord> {
+    const token = await this.issueToken(input);
+    this.outboxRepo.enqueue(
+      input.outboxEvent.eventType,
+      input.outboxEvent.aggregateType,
+      input.outboxEvent.aggregateId,
+      input.outboxEvent.payload,
+      input.now,
+    );
+    return token;
+  }
+
+  async hasEligibleToken(tokenHash: string, now: Date): Promise<boolean> {
+    const token = this.tokens.find((t) => t.tokenHash === tokenHash);
+    if (!token || token.usedAt !== null || token.expiresAt.getTime() <= now.getTime()) {
+      return false;
+    }
+    const user = this.userRepo.users.find((u) => u.id === token.userId);
+    return Boolean(user && user.status === UserStatus.ACTIVE && user.emailVerifiedAt !== null);
   }
 
   async consumeAndResetPassword(
@@ -318,6 +416,7 @@ class FakeEmailSender implements EmailSender {
   public sent: VerificationEmailPayload[] = [];
   public sentReset: PasswordResetEmailPayload[] = [];
   public shouldFail = false;
+  public deferredResetGate: Promise<void> | null = null;
 
   async sendVerificationEmail(payload: VerificationEmailPayload): Promise<void> {
     if (this.shouldFail) {
@@ -327,6 +426,9 @@ class FakeEmailSender implements EmailSender {
   }
 
   async sendPasswordResetEmail(payload: PasswordResetEmailPayload): Promise<void> {
+    if (this.deferredResetGate) {
+      await this.deferredResetGate;
+    }
     if (this.shouldFail) {
       throw new Error(`Provider outage for ${payload.resetUrl}`);
     }
@@ -347,7 +449,9 @@ describe('Identity Auth Routes', () => {
   const jwtSecret = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   let mockRepo: MockUserRepository;
   let mockTokenRepo: MockVerificationTokenRepository;
+  let mockResetOutboxRepo: MockPasswordResetOutboxRepository;
   let mockResetTokenRepo: MockPasswordResetTokenRepository;
+  let mockOutboxDispatcher: PasswordResetOutboxDispatcher;
   let mockSessionRepo: MockSessionRepository;
   let fakeEmailSender: FakeEmailSender;
   let hasher: BcryptPasswordHasher;
@@ -369,10 +473,21 @@ describe('Identity Auth Routes', () => {
     mockRepo = new MockUserRepository();
     mockTokenRepo = new MockVerificationTokenRepository(mockRepo);
     mockSessionRepo = new MockSessionRepository(mockRepo);
-    mockResetTokenRepo = new MockPasswordResetTokenRepository(mockRepo, mockSessionRepo);
+    mockResetOutboxRepo = new MockPasswordResetOutboxRepository();
+    mockResetTokenRepo = new MockPasswordResetTokenRepository(
+      mockRepo,
+      mockSessionRepo,
+      mockResetOutboxRepo,
+    );
     fakeEmailSender = new FakeEmailSender();
     hasher = new BcryptPasswordHasher(4); // fast salt rounds for route tests
     tokenService = new CryptoVerificationTokenService();
+    mockOutboxDispatcher = new PasswordResetOutboxDispatcher({
+      outboxRepository: mockResetOutboxRepo,
+      emailSender: fakeEmailSender,
+      payloadCipher: new OutboxPayloadCipher(jwtSecret),
+      clock,
+    });
     accessTokenService = new JoseAccessTokenService({
       secret: jwtSecret,
       ttlSeconds: 900,
@@ -390,6 +505,9 @@ describe('Identity Auth Routes', () => {
         verificationTokenRepository: mockTokenRepo,
         verificationTokenService: tokenService,
         passwordResetTokenRepository: mockResetTokenRepo,
+        passwordResetOutboxRepository: mockResetOutboxRepo,
+        passwordResetOutboxDispatcher: mockOutboxDispatcher,
+        outboxEncryptionSecret: jwtSecret,
         passwordResetTokenTtlMinutes: 30,
         emailSender: fakeEmailSender,
         sessionRepository: mockSessionRepo,
@@ -420,6 +538,8 @@ describe('Identity Auth Routes', () => {
           ipWindowSeconds: 900,
           emailMax: 2,
           emailWindowSeconds: 900,
+          confirmIpMax: 5,
+          confirmIpWindowSeconds: 900,
           clock,
         }),
       },
@@ -1319,6 +1439,7 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/password-reset/request')
         .send({ email: '  ABEBE@Example.COM  ' })
         .expect(202);
+      await mockOutboxDispatcher.drain();
 
       const expectedBody = {
         data: {
@@ -1355,6 +1476,10 @@ describe('Identity Auth Routes', () => {
         .expect(202);
 
       expect(failDeliveryRes.body.data.accepted).toBe(true);
+      await mockOutboxDispatcher.drain();
+      expect(mockResetOutboxRepo.events).toHaveLength(1);
+      expect(mockResetOutboxRepo.events[0]!.attempts).toBe(1);
+      expect(mockResetOutboxRepo.events[0]!.status).toBe(OutboxStatus.PENDING);
 
       // Email rate limit is 2 in test setup
       await request(app)
@@ -1401,6 +1526,7 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/password-reset/request')
         .send({ email: validPayload.email })
         .expect(202);
+      await mockOutboxDispatcher.drain();
 
       const firstToken = extractTokenFromUrl(fakeEmailSender.sentReset[0]!.resetUrl);
 
@@ -1410,6 +1536,7 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/password-reset/request')
         .send({ email: validPayload.email })
         .expect(202);
+      await mockOutboxDispatcher.drain();
       const secondToken = extractTokenFromUrl(fakeEmailSender.sentReset[1]!.resetUrl);
       expect(secondToken).not.toBe(firstToken);
 
@@ -1480,6 +1607,7 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/password-reset/request')
         .send({ email: validPayload.email })
         .expect(202);
+      await mockOutboxDispatcher.drain();
       const rawToken = extractTokenFromUrl(fakeEmailSender.sentReset[0]!.resetUrl);
 
       // Advance clock past 30-minute TTL
@@ -1503,6 +1631,83 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/password-reset/request')
         .send({ email: 'bad-email' })
         .expect(422);
+    });
+
+    it('returns 202 immediately via durable outbox without blocking on slow email provider latency', async () => {
+      await seedVerifiedUserAndSessions();
+
+      let releaseProvider!: () => void;
+      fakeEmailSender.deferredResetGate = new Promise<void>((resolve) => {
+        releaseProvider = resolve;
+      });
+
+      let requestCompleted = false;
+      const responsePromise = request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(202)
+        .then((res) => {
+          requestCompleted = true;
+          return res;
+        });
+
+      const res = await responsePromise;
+      expect(requestCompleted).toBe(true);
+      expect(res.body.data.accepted).toBe(true);
+
+      // Durable outbox item persisted before email delivery completes, without plaintext URL/token
+      expect(mockResetOutboxRepo.events).toHaveLength(1);
+      const outboxEvent = mockResetOutboxRepo.events[0]!;
+      expect([OutboxStatus.PENDING, OutboxStatus.PROCESSING]).toContain(outboxEvent.status);
+      expect(JSON.stringify(outboxEvent.payload)).not.toContain('reset-password');
+
+      // Provider finishes asynchronously -> outbox dispatches and marks PUBLISHED
+      fakeEmailSender.deferredResetGate = null;
+      releaseProvider();
+      await mockOutboxDispatcher.waitForIdle();
+
+      expect(fakeEmailSender.sentReset).toHaveLength(1);
+      expect(outboxEvent.status).toBe(OutboxStatus.PUBLISHED);
+      expect(outboxEvent.payload).toEqual({ redacted: true });
+    });
+
+    it('throttles POST /api/v1/auth/password-reset/confirm by IP with 429 Problem Details and skips bcrypt on invalid tokens', async () => {
+      const hashSpy = vi.spyOn(hasher, 'hash');
+
+      try {
+        // Confirm IP limit is configured to 5 in test setup; invalid tokens must not trigger bcrypt.hash
+        for (let i = 0; i < 5; i++) {
+          const invalidRes = await request(app)
+            .post('/api/v1/auth/password-reset/confirm')
+            .send({
+              token: `invalid-reset-token-${i}`,
+              newPassword: 'ValidNewPassword123!',
+            })
+            .expect(400);
+
+          expect(invalidRes.body.code).toBe('INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN');
+        }
+
+        expect(hashSpy).not.toHaveBeenCalled();
+
+        const throttledRes = await request(app)
+          .post('/api/v1/auth/password-reset/confirm')
+          .send({
+            token: 'invalid-reset-token-6',
+            newPassword: 'ValidNewPassword123!',
+          })
+          .expect(429);
+
+        expect(throttledRes.headers['content-type']).toMatch(/application\/problem\+json/);
+        expect(throttledRes.headers['retry-after']).toBeDefined();
+        expect(throttledRes.body).toMatchObject({
+          status: 429,
+          code: 'RATE_LIMIT_EXCEEDED',
+        });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        hashSpy.mockRestore();
+      }
     });
   });
 });

@@ -37,6 +37,8 @@ describe('loadEnv (Centralized API environment validation)', () => {
       PASSWORD_RESET_RATE_LIMIT_IP_WINDOW_SECONDS: '600',
       PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX: '4',
       PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS: '1800',
+      PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_MAX: '6',
+      PASSWORD_RESET_CONFIRM_RATE_LIMIT_IP_WINDOW_SECONDS: '300',
       TRUST_PROXY: 'true',
     });
 
@@ -71,6 +73,8 @@ describe('loadEnv (Centralized API environment validation)', () => {
       passwordResetRateLimitIpWindowSeconds: 600,
       passwordResetRateLimitEmailMax: 4,
       passwordResetRateLimitEmailWindowSeconds: 1800,
+      passwordResetConfirmRateLimitIpMax: 6,
+      passwordResetConfirmRateLimitIpWindowSeconds: 300,
       trustProxy: true,
     });
   });
@@ -109,6 +113,8 @@ describe('loadEnv (Centralized API environment validation)', () => {
     expect(config.passwordResetRateLimitIpWindowSeconds).toBe(900);
     expect(config.passwordResetRateLimitEmailMax).toBe(3);
     expect(config.passwordResetRateLimitEmailWindowSeconds).toBe(900);
+    expect(config.passwordResetConfirmRateLimitIpMax).toBe(10);
+    expect(config.passwordResetConfirmRateLimitIpWindowSeconds).toBe(900);
     expect(config.trustProxy).toBe(false);
   });
 

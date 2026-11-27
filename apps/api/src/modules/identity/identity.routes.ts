@@ -22,9 +22,11 @@ import { RefreshSessionUseCase } from './application/refresh-session.use-case.js
 import { LogoutSessionUseCase } from './application/logout-session.use-case.js';
 import { RequestPasswordResetUseCase } from './application/request-password-reset.use-case.js';
 import { ConfirmPasswordResetUseCase } from './application/confirm-password-reset.use-case.js';
+import { PasswordResetOutboxDispatcher } from './application/password-reset-outbox-dispatcher.js';
 import { PrismaUserRepository } from './infrastructure/prisma-user.repository.js';
 import { PrismaEmailVerificationTokenRepository } from './infrastructure/prisma-email-verification-token.repository.js';
 import { PrismaPasswordResetTokenRepository } from './infrastructure/prisma-password-reset-token.repository.js';
+import { PrismaPasswordResetOutboxRepository } from './infrastructure/prisma-password-reset-outbox.repository.js';
 import { PrismaSessionRepository } from './infrastructure/prisma-session.repository.js';
 import { DevelopmentEmailSender } from './infrastructure/email-sender.js';
 import { ResendRateLimiter } from './infrastructure/resend-rate-limiter.js';
@@ -32,6 +34,7 @@ import { LoginRateLimiter } from './infrastructure/login-rate-limiter.js';
 import { PasswordResetRateLimiter } from './infrastructure/password-reset-rate-limiter.js';
 import type { RateLimitDecision } from './infrastructure/sliding-window-counter.js';
 import { BcryptPasswordHasher, type PasswordHasher } from './domain/password-hasher.js';
+import { OutboxPayloadCipher } from './domain/outbox-payload-cipher.js';
 import {
   CryptoVerificationTokenService,
   type Clock,
@@ -49,6 +52,7 @@ import type { EmailVerificationTokenRepository } from './ports/email-verificatio
 import type { EmailSender } from './ports/email-sender.js';
 import type { SessionRepository } from './ports/session.repository.js';
 import type { PasswordResetTokenRepository } from './ports/password-reset-token.repository.js';
+import type { PasswordResetOutboxRepository } from './ports/password-reset-outbox.repository.js';
 
 export interface IdentityRouterOptions {
   userRepository?: UserRepository | undefined;
@@ -62,6 +66,9 @@ export interface IdentityRouterOptions {
   refreshTokenService?: RefreshTokenService | undefined;
   loginRateLimiter?: LoginRateLimiter | undefined;
   passwordResetTokenRepository?: PasswordResetTokenRepository | undefined;
+  passwordResetOutboxRepository?: PasswordResetOutboxRepository | undefined;
+  passwordResetOutboxDispatcher?: PasswordResetOutboxDispatcher | undefined;
+  outboxEncryptionSecret?: string | undefined;
   passwordResetRateLimiter?: PasswordResetRateLimiter | undefined;
   passwordResetTokenTtlMinutes?: number | undefined;
   refreshTokenTtlDays?: number | undefined;
@@ -73,12 +80,15 @@ export interface IdentityRouterOptions {
   clock?: Clock | undefined;
 }
 
-interface DualKeyRateLimiter {
+interface IpRateLimiter {
   checkIp(ipKey: string): RateLimitDecision;
+}
+
+interface DualKeyRateLimiter extends IpRateLimiter {
   checkEmail(normalizedEmail: string): RateLimitDecision;
 }
 
-function createIpRateLimitMiddleware(limiter: DualKeyRateLimiter, errorMessage: string) {
+function createIpRateLimitMiddleware(limiter: IpRateLimiter, errorMessage: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const decision = limiter.checkIp(req.ip ?? 'unknown');
     if (!decision.allowed) {
@@ -142,6 +152,19 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
   const loginRateLimiter = options?.loginRateLimiter ?? new LoginRateLimiter({ clock });
   const passwordResetTokenRepository =
     options?.passwordResetTokenRepository ?? new PrismaPasswordResetTokenRepository();
+  const outboxPayloadCipher = new OutboxPayloadCipher(
+    options?.outboxEncryptionSecret ?? 'dev-test-outbox-encryption-secret-min-32-chars',
+  );
+  const passwordResetOutboxRepository =
+    options?.passwordResetOutboxRepository ?? new PrismaPasswordResetOutboxRepository();
+  const passwordResetOutboxDispatcher =
+    options?.passwordResetOutboxDispatcher ??
+    new PasswordResetOutboxDispatcher({
+      outboxRepository: passwordResetOutboxRepository,
+      emailSender,
+      payloadCipher: outboxPayloadCipher,
+      clock,
+    });
   const passwordResetRateLimiter =
     options?.passwordResetRateLimiter ?? new PasswordResetRateLimiter({ clock });
   const passwordResetTokenTtlMinutes = options?.passwordResetTokenTtlMinutes ?? 30;
@@ -201,7 +224,8 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
     userRepository,
     tokenRepository: passwordResetTokenRepository,
     tokenService: verificationTokenService,
-    emailSender,
+    payloadCipher: outboxPayloadCipher,
+    outboxNotifier: passwordResetOutboxDispatcher,
     appWebUrl,
     tokenTtlMinutes: passwordResetTokenTtlMinutes,
     clock,
@@ -232,6 +256,8 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
   const resendRateLimitMessage = 'Too many verification email requests. Please try again later.';
   const loginRateLimitMessage = 'Too many login attempts. Please try again later.';
   const passwordResetRateLimitMessage = 'Too many password reset requests. Please try again later.';
+  const passwordResetConfirmRateLimitMessage =
+    'Too many password reset attempts. Please try again later.';
 
   router.post('/register', validateBody(registerRequestSchema), controller.register);
   router.post('/verify-email', validateBody(verifyEmailRequestSchema), controller.verifyEmail);
@@ -260,6 +286,10 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
   );
   router.post(
     '/password-reset/confirm',
+    createIpRateLimitMiddleware(
+      { checkIp: (ipKey) => passwordResetRateLimiter.checkConfirmIp(ipKey) },
+      passwordResetConfirmRateLimitMessage,
+    ),
     validateBody(confirmPasswordResetRequestSchema),
     controller.confirmPasswordReset,
   );

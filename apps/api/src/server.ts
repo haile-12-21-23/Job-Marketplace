@@ -9,7 +9,10 @@ import {
   createEmailSender,
   JoseAccessTokenService,
   LoginRateLimiter,
+  OutboxPayloadCipher,
+  PasswordResetOutboxDispatcher,
   PasswordResetRateLimiter,
+  PrismaPasswordResetOutboxRepository,
   ResendRateLimiter,
 } from './modules/identity/index.js';
 
@@ -36,13 +39,21 @@ logger.level = config.logLevel;
 const PORT = config.port;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+const emailSender = createEmailSender(config);
+const passwordResetOutboxRepository = new PrismaPasswordResetOutboxRepository();
+const passwordResetOutboxDispatcher = new PasswordResetOutboxDispatcher({
+  outboxRepository: passwordResetOutboxRepository,
+  emailSender,
+  payloadCipher: new OutboxPayloadCipher(config.authAccessTokenSecret),
+});
+
 const app = createApp({
   corsOrigins: config.corsOrigins,
   trustProxy: config.trustProxy,
   identity: {
     appWebUrl: config.appWebUrl,
     emailVerificationTokenTtlMinutes: config.emailVerificationTokenTtlMinutes,
-    emailSender: createEmailSender(config),
+    emailSender,
     resendRateLimiter: new ResendRateLimiter({
       ipMax: config.emailVerificationResendIpMax,
       ipWindowSeconds: config.emailVerificationResendIpWindowSeconds,
@@ -66,8 +77,13 @@ const app = createApp({
       ipWindowSeconds: config.passwordResetRateLimitIpWindowSeconds,
       emailMax: config.passwordResetRateLimitEmailMax,
       emailWindowSeconds: config.passwordResetRateLimitEmailWindowSeconds,
+      confirmIpMax: config.passwordResetConfirmRateLimitIpMax,
+      confirmIpWindowSeconds: config.passwordResetConfirmRateLimitIpWindowSeconds,
     }),
     passwordResetTokenTtlMinutes: config.passwordResetTokenTtlMinutes,
+    passwordResetOutboxRepository,
+    passwordResetOutboxDispatcher,
+    outboxEncryptionSecret: config.authAccessTokenSecret,
     refreshTokenTtlDays: config.authRefreshTokenTtlDays,
     refreshCookieSameSite: config.authRefreshCookieSameSite,
     isProduction: config.nodeEnv === 'production',
@@ -81,6 +97,7 @@ async function start(): Promise<void> {
   try {
     await connectDatabase(config.databaseUrl);
     logger.info('Database connection established successfully');
+    passwordResetOutboxDispatcher.start();
 
     server.listen(PORT, () => {
       logger.info({ port: PORT }, `Job Marketplace API listening on port ${PORT}`);
@@ -129,6 +146,7 @@ function shutdown(signal: string, exitCode = 0): void {
     }
 
     try {
+      await passwordResetOutboxDispatcher.stop();
       await disconnectDatabase();
       logger.info('Database connection closed — exiting cleanly');
     } catch (dbErr) {

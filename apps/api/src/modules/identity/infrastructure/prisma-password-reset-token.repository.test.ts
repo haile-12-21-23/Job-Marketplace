@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, afterAll } from 'vitest';
 import type { PrismaClient } from '../../../generated/prisma/client.js';
-import { UserStatus } from '../../../generated/prisma/enums.js';
+import { OutboxStatus, UserStatus } from '../../../generated/prisma/enums.js';
 import { disconnectDatabase, getPrismaClient } from '../../../infrastructure/database/prisma.js';
+import { OutboxPayloadCipher } from '../domain/outbox-payload-cipher.js';
 import { CryptoRefreshTokenService } from '../domain/refresh-token.js';
 import { CryptoVerificationTokenService } from '../domain/verification-token.js';
+import { PASSWORD_RESET_EMAIL_OUTBOX_EVENT_TYPE } from '../ports/password-reset-outbox.repository.js';
+import { PrismaPasswordResetOutboxRepository } from './prisma-password-reset-outbox.repository.js';
 import { PrismaPasswordResetTokenRepository } from './prisma-password-reset-token.repository.js';
 import { PrismaSessionRepository } from './prisma-session.repository.js';
 import { PrismaUserRepository } from './prisma-user.repository.js';
@@ -419,6 +422,120 @@ describe('PrismaPasswordResetTokenRepository', () => {
     } finally {
       await prisma.user.deleteMany({
         where: { email: testEmail },
+      });
+    }
+  });
+
+  it('prechecks token eligibility without mutating state and claims durable encrypted outbox events atomically with SKIP LOCKED', async () => {
+    if (!process.env['DATABASE_URL']) {
+      return;
+    }
+
+    const prisma = getPrismaClient();
+    const userRepo = new PrismaUserRepository(prisma);
+    const resetRepo = new PrismaPasswordResetTokenRepository(prisma);
+    const outboxRepo = new PrismaPasswordResetOutboxRepository(prisma);
+    const tokenService = new CryptoVerificationTokenService();
+    const cipher = new OutboxPayloadCipher('0123456789abcdef0123456789abcdef0123456789abcdef');
+
+    const suffix = `${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+    const activeEmail = `test.outbox.active.${suffix}@example.com`;
+    const unverifiedEmail = `test.outbox.unverified.${suffix}@example.com`;
+    const createdUserIds: string[] = [];
+
+    try {
+      const now = new Date('2026-11-27T11:00:00Z');
+      const activeUser = await userRepo.create({
+        displayName: 'Outbox Active',
+        email: activeEmail,
+        passwordHash: '$2a$10$activeuserhash1234567890123456789012345678901',
+        status: UserStatus.ACTIVE,
+      });
+      createdUserIds.push(activeUser.id);
+      await prisma.user.update({
+        where: { id: activeUser.id },
+        data: { emailVerifiedAt: new Date('2026-11-26T08:00:00Z') },
+      });
+
+      const unverifiedUser = await userRepo.create({
+        displayName: 'Outbox Unverified',
+        email: unverifiedEmail,
+        passwordHash: '$2a$10$unverifiedhash12345678901234567890123456789',
+        status: UserStatus.ACTIVE,
+      });
+      createdUserIds.push(unverifiedUser.id);
+
+      const rawToken = tokenService.generateToken();
+      const tokenHash = tokenService.hashToken(rawToken);
+      const resetUrl = tokenService.buildPasswordResetUrl('https://jobs.example.com', rawToken);
+
+      await resetRepo.issueTokenWithOutbox({
+        userId: activeUser.id,
+        tokenHash,
+        expiresAt: new Date(now.getTime() + 30 * 60_000),
+        now,
+        outboxEvent: {
+          eventType: PASSWORD_RESET_EMAIL_OUTBOX_EVENT_TYPE,
+          aggregateType: 'user',
+          aggregateId: activeUser.id,
+          payload: cipher.sealJson({
+            to: activeEmail,
+            displayName: 'Outbox Active',
+            resetUrl,
+            expiresInMinutes: 30,
+          }),
+        },
+      });
+
+      const unverifiedHash = tokenService.hashToken(tokenService.generateToken());
+      await resetRepo.issueToken({
+        userId: unverifiedUser.id,
+        tokenHash: unverifiedHash,
+        expiresAt: new Date(now.getTime() + 30 * 60_000),
+        now,
+      });
+
+      // Eligibility prechecks accurately reflect state
+      expect(await resetRepo.hasEligibleToken(tokenHash, now)).toBe(true);
+      expect(await resetRepo.hasEligibleToken('nonexistent-hash', now)).toBe(false);
+      expect(await resetRepo.hasEligibleToken(unverifiedHash, now)).toBe(false);
+      expect(
+        await resetRepo.hasEligibleToken(tokenHash, new Date(now.getTime() + 31 * 60_000)),
+      ).toBe(false);
+
+      // Persisted outbox row stores sealed payload without plaintext token or URL
+      const persistedEvents = await prisma.outboxEvent.findMany({
+        where: { aggregateId: activeUser.id },
+      });
+      expect(persistedEvents).toHaveLength(1);
+      expect(persistedEvents[0]!.status).toBe(OutboxStatus.PENDING);
+      expect(JSON.stringify(persistedEvents[0]!.payload)).not.toContain(rawToken);
+      expect(JSON.stringify(persistedEvents[0]!.payload)).not.toContain(resetUrl);
+
+      // Concurrent workers claim at most once with FOR UPDATE SKIP LOCKED
+      const [batchA, batchB] = await Promise.all([
+        outboxRepo.claimPendingBatch(10, now, 60_000),
+        outboxRepo.claimPendingBatch(10, now, 60_000),
+      ]);
+      const claimedForUser = [...batchA, ...batchB].filter(
+        (row) => row.aggregateId === activeUser.id,
+      );
+      expect(claimedForUser).toHaveLength(1);
+
+      await outboxRepo.markPublished(claimedForUser[0]!.id);
+      const published = await prisma.outboxEvent.findUnique({
+        where: { id: claimedForUser[0]!.id },
+      });
+      expect(published?.status).toBe(OutboxStatus.PUBLISHED);
+      expect(published?.payload).toEqual({ redacted: true });
+    } finally {
+      if (createdUserIds.length > 0) {
+        await prisma.outboxEvent.deleteMany({
+          where: { aggregateId: { in: createdUserIds } },
+        });
+      }
+      await prisma.user.deleteMany({
+        where: { email: { in: [activeEmail, unverifiedEmail] } },
       });
     }
   });
