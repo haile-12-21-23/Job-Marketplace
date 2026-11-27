@@ -6,6 +6,7 @@ import ResetPasswordPage from './ResetPasswordPage.js';
 import { AppProviders } from '../app/providers.js';
 import { createAppStore } from '../app/store.js';
 import { selectIsAuthenticated } from '../app/auth-slice.js';
+import indexHtml from '../../index.html?raw';
 
 function LocationProbe() {
   const location = useLocation();
@@ -160,5 +161,25 @@ describe('ResetPasswordPage', () => {
     );
     expect(newPw.value).toBe('');
     expect(confirmPw.value).toBe('');
+  });
+
+  it('includes static no-referrer meta tag in index.html head before module script subresources', () => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(indexHtml, 'text/html');
+    const metaReferrer = doc.head.querySelector('meta[name="referrer"]');
+    expect(metaReferrer?.getAttribute('content')).toBe('no-referrer');
+
+    const headChildren = Array.from(doc.head.children);
+    const referrerIndex = headChildren.findIndex(
+      (el) => el.tagName === 'META' && el.getAttribute('name') === 'referrer',
+    );
+    const scriptInHeadIndex = headChildren.findIndex((el) => el.tagName === 'SCRIPT');
+    expect(referrerIndex).toBeGreaterThanOrEqual(0);
+    if (scriptInHeadIndex >= 0) {
+      expect(referrerIndex).toBeLessThan(scriptInHeadIndex);
+    }
+
+    // Verify raw document order places meta[name="referrer"] before the entry module script
+    expect(indexHtml.indexOf('name="referrer"')).toBeLessThan(indexHtml.indexOf('/src/main.tsx'));
   });
 });
