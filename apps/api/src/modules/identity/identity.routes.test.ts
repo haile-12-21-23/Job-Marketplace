@@ -11,7 +11,12 @@ import type {
 } from './ports/user.repository.js';
 import type {
   CreateSessionInput,
+  ReplayCheckResult,
+  RevokeFamilyResult,
+  RotateSessionInput,
+  RotateSessionResult,
   SessionRepository,
+  SessionRotationCandidate,
   UserSessionRecord,
 } from './ports/session.repository.js';
 import type {
@@ -69,6 +74,8 @@ class MockSessionRepository implements SessionRepository {
   public sessions: UserSessionRecord[] = [];
   private seq = 1;
 
+  constructor(private readonly userRepo: MockUserRepository) {}
+
   async create(input: CreateSessionInput): Promise<UserSessionRecord> {
     const record: UserSessionRecord = {
       id: `6ba7b810-9dad-11d1-80b4-00c04fd4300${this.seq++}`,
@@ -82,6 +89,107 @@ class MockSessionRepository implements SessionRepository {
     };
     this.sessions.push(record);
     return record;
+  }
+
+  async findRotationCandidateByTokenHash(
+    refreshTokenHash: string,
+  ): Promise<SessionRotationCandidate | null> {
+    const session = this.sessions.find((s) => s.refreshTokenHash === refreshTokenHash);
+    if (!session) return null;
+    const user = this.userRepo.users.find((u) => u.id === session.userId);
+    if (!user) return null;
+
+    return {
+      session: { ...session },
+      user: {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        status: user.status,
+        emailVerifiedAt: user.emailVerifiedAt,
+      },
+    };
+  }
+
+  async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
+    const session = this.sessions.find((s) => s.refreshTokenHash === input.presentedTokenHash);
+    if (!session) return { outcome: 'not_found' };
+
+    if (session.revokedAt !== null) {
+      const hasChild = this.sessions.some((s) => s.parentSessionId === session.id);
+      if (hasChild) {
+        for (const s of this.sessions) {
+          if (s.tokenFamilyId === session.tokenFamilyId && s.revokedAt === null) {
+            s.revokedAt = input.now;
+          }
+        }
+        return { outcome: 'replayed', tokenFamilyId: session.tokenFamilyId };
+      }
+      return { outcome: 'revoked' };
+    }
+
+    if (session.expiresAt.getTime() <= input.now.getTime()) {
+      return { outcome: 'expired' };
+    }
+
+    const user = this.userRepo.users.find((u) => u.id === session.userId);
+    if (!user || user.status !== UserStatus.ACTIVE || user.emailVerifiedAt === null) {
+      return { outcome: 'user_ineligible' };
+    }
+
+    session.revokedAt = input.now;
+    const child: UserSessionRecord = {
+      id: input.newSessionId,
+      userId: session.userId,
+      tokenFamilyId: session.tokenFamilyId,
+      refreshTokenHash: input.newRefreshTokenHash,
+      parentSessionId: session.id,
+      expiresAt: session.expiresAt,
+      revokedAt: null,
+      createdAt: input.now,
+    };
+    this.sessions.push(child);
+
+    return {
+      outcome: 'rotated',
+      session: child,
+      user: {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+      },
+    };
+  }
+
+  async revokeFamilyIfReplayed(refreshTokenHash: string, now: Date): Promise<ReplayCheckResult> {
+    const session = this.sessions.find((s) => s.refreshTokenHash === refreshTokenHash);
+    if (!session) return { outcome: 'not_found' };
+
+    const hasChild = this.sessions.some((s) => s.parentSessionId === session.id);
+    if (hasChild) {
+      for (const s of this.sessions) {
+        if (s.tokenFamilyId === session.tokenFamilyId && s.revokedAt === null) {
+          s.revokedAt = now;
+        }
+      }
+      return { outcome: 'replayed', tokenFamilyId: session.tokenFamilyId };
+    }
+
+    return { outcome: 'revoked' };
+  }
+
+  async revokeFamilyByTokenHash(refreshTokenHash: string, now: Date): Promise<RevokeFamilyResult> {
+    const session = this.sessions.find((s) => s.refreshTokenHash === refreshTokenHash);
+    if (!session) return { revokedCount: 0, tokenFamilyId: null };
+
+    let revokedCount = 0;
+    for (const s of this.sessions) {
+      if (s.tokenFamilyId === session.tokenFamilyId && s.revokedAt === null) {
+        s.revokedAt = now;
+        revokedCount++;
+      }
+    }
+    return { revokedCount, tokenFamilyId: session.tokenFamilyId };
   }
 }
 
@@ -143,6 +251,11 @@ function extractTokenFromUrl(url: string): string {
   return new URL(url).searchParams.get('token') ?? '';
 }
 
+function getFirstSetCookie(headers: Record<string, unknown>): string {
+  const raw = headers['set-cookie'] as string | string[] | undefined;
+  return Array.isArray(raw) ? raw[0]! : raw!;
+}
+
 describe('Identity Auth Routes', () => {
   const jwtSecret = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   let mockRepo: MockUserRepository;
@@ -167,7 +280,7 @@ describe('Identity Auth Routes', () => {
     const clock = () => new Date(nowMs);
     mockRepo = new MockUserRepository();
     mockTokenRepo = new MockVerificationTokenRepository(mockRepo);
-    mockSessionRepo = new MockSessionRepository();
+    mockSessionRepo = new MockSessionRepository(mockRepo);
     fakeEmailSender = new FakeEmailSender();
     hasher = new BcryptPasswordHasher(4); // fast salt rounds for route tests
     tokenService = new CryptoVerificationTokenService();
@@ -744,6 +857,301 @@ describe('Identity Auth Routes', () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       expect(warnSpy).toBeDefined();
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('POST /api/v1/auth/refresh and POST /api/v1/auth/logout', () => {
+    async function seedAndLogin(origin = 'http://localhost:5173') {
+      await request(app).post('/api/v1/auth/register').send(validPayload).expect(201);
+      const verifyToken = extractTokenFromUrl(fakeEmailSender.sent[0]!.verificationUrl);
+      await request(app).post('/api/v1/auth/verify-email').send({ token: verifyToken }).expect(200);
+
+      const loginRes = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', origin)
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+
+      const setCookie = loginRes.headers['set-cookie'];
+      const cookieHeader = Array.isArray(setCookie) ? setCookie[0]! : setCookie!;
+      const rawRefreshCookie = cookieHeader.split(';')[0]!;
+      return { loginRes, rawRefreshCookie };
+    }
+
+    it('rotates refresh cookie, sets no-store headers, returns new JWT bound to child sid, and detects replay', async () => {
+      const { rawRefreshCookie } = await seedAndLogin();
+      const rootSession = mockSessionRepo.sessions[0]!;
+
+      nowMs += 60_000;
+      const refreshRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Sec-Fetch-Site', 'same-site')
+        .set('Cookie', rawRefreshCookie)
+        .expect(200);
+
+      expect(refreshRes.headers['cache-control']).toBe('no-store');
+      expect(refreshRes.headers['pragma']).toBe('no-cache');
+      expect(refreshRes.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+      expect(refreshRes.headers['access-control-allow-credentials']).toBe('true');
+
+      expect(refreshRes.body).toEqual({
+        data: {
+          accessToken: expect.any(String),
+          tokenType: 'Bearer',
+          expiresIn: 900,
+          user: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            displayName: 'Abebe Bikila',
+            email: 'abebe@example.com',
+          },
+        },
+      });
+
+      const setCookie = refreshRes.headers['set-cookie'];
+      const newCookieHeader = Array.isArray(setCookie) ? setCookie[0]! : setCookie!;
+      expect(newCookieHeader).toContain('jmp_refresh=');
+      expect(newCookieHeader).toContain('HttpOnly');
+      expect(newCookieHeader).toContain('SameSite=Lax');
+      expect(newCookieHeader).toContain('Path=/api/v1/auth');
+      expect(newCookieHeader).not.toContain('Domain=');
+      const newCookiePair = newCookieHeader.split(';')[0]!;
+      const newRawToken = newCookiePair.split('=')[1]!;
+      expect(newCookiePair).not.toBe(rawRefreshCookie);
+
+      const bodyString = JSON.stringify(refreshRes.body);
+      expect(bodyString).not.toContain(newRawToken);
+      expect(bodyString).not.toContain('refreshToken');
+
+      expect(mockSessionRepo.sessions).toHaveLength(2);
+      const childSession = mockSessionRepo.sessions[1]!;
+      expect(rootSession.revokedAt).not.toBeNull();
+      expect(childSession.parentSessionId).toBe(rootSession.id);
+      expect(childSession.tokenFamilyId).toBe(rootSession.tokenFamilyId);
+      expect(childSession.expiresAt.getTime()).toBe(rootSession.expiresAt.getTime());
+
+      const claims = await accessTokenService.verify(refreshRes.body.data.accessToken as string);
+      expect(claims.sid).toBe(childSession.id);
+
+      // Replaying the consumed parent cookie returns generic 401 and revokes the family
+      const replayRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', rawRefreshCookie)
+        .expect(401);
+
+      expect(replayRes.body).toMatchObject({
+        status: 401,
+        code: 'INVALID_REFRESH_TOKEN',
+        detail: 'Invalid or expired session.',
+      });
+      expect(childSession.revokedAt).not.toBeNull();
+
+      // Subsequent use of child cookie now fails with identical generic 401
+      const afterReplayChildRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', newCookiePair)
+        .expect(401);
+
+      expect(afterReplayChildRes.body).toMatchObject({
+        status: 401,
+        code: 'INVALID_REFRESH_TOKEN',
+        detail: 'Invalid or expired session.',
+      });
+    });
+
+    it('rejects missing, unknown, duplicate, expired, or body-supplied refresh credentials identically', async () => {
+      const { rawRefreshCookie } = await seedAndLogin();
+      const rawToken = rawRefreshCookie.split('=')[1]!;
+
+      const missingRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .send({ refreshToken: rawToken })
+        .expect(401);
+
+      const authHeaderRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Authorization', `Bearer ${rawToken}`)
+        .expect(401);
+
+      const unknownRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', 'jmp_refresh=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        .expect(401);
+
+      const duplicateRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', `${rawRefreshCookie}; ${rawRefreshCookie}`)
+        .expect(401);
+
+      for (const r of [missingRes, authHeaderRes, unknownRes, duplicateRes]) {
+        expect(r.headers['cache-control']).toBe('no-store');
+        expect(r.headers['pragma']).toBe('no-cache');
+        expect(r.body).toMatchObject({
+          status: 401,
+          code: 'INVALID_REFRESH_TOKEN',
+          detail: 'Invalid or expired session.',
+        });
+      }
+
+      // Expired session
+      nowMs = mockSessionRepo.sessions[0]!.expiresAt.getTime() + 1000;
+      const expiredRes = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', rawRefreshCookie)
+        .expect(401);
+      expect(expiredRes.body.code).toBe('INVALID_REFRESH_TOKEN');
+    });
+
+    it('enforces strict Origin allowlist and Sec-Fetch-Site protection on refresh and logout', async () => {
+      const { rawRefreshCookie } = await seedAndLogin();
+
+      for (const path of ['/api/v1/auth/refresh', '/api/v1/auth/logout']) {
+        await request(app).post(path).set('Cookie', rawRefreshCookie).expect(403);
+        await request(app)
+          .post(path)
+          .set('Origin', 'null')
+          .set('Cookie', rawRefreshCookie)
+          .expect(403);
+        await request(app)
+          .post(path)
+          .set('Origin', 'not-a-valid-origin')
+          .set('Cookie', rawRefreshCookie)
+          .expect(403);
+        await request(app)
+          .post(path)
+          .set('Origin', 'https://evil.example.com')
+          .set('Cookie', rawRefreshCookie)
+          .expect(403);
+        await request(app)
+          .post(path)
+          .set('Origin', 'http://localhost:5173')
+          .set('Sec-Fetch-Site', 'cross-site')
+          .set('Cookie', rawRefreshCookie)
+          .expect(403);
+      }
+
+      // Session remains untouched after rejected CSRF attempts
+      expect(mockSessionRepo.sessions[0]!.revokedAt).toBeNull();
+    });
+
+    it('logout revokes only the presented token family, clears cookie with matching attributes, and is idempotent', async () => {
+      const { rawRefreshCookie: device1Cookie } = await seedAndLogin();
+
+      // Sign in on a second device (second token family for same user)
+      const login2 = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', 'http://localhost:5173')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+      const device2Cookie = getFirstSetCookie(login2.headers).split(';')[0]!;
+
+      const logoutRes = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', device1Cookie)
+        .expect(200);
+
+      expect(logoutRes.headers['cache-control']).toBe('no-store');
+      expect(logoutRes.headers['pragma']).toBe('no-cache');
+      expect(logoutRes.body).toEqual({ data: { loggedOut: true } });
+
+      const clearHeader = getFirstSetCookie(logoutRes.headers);
+      expect(clearHeader).toContain('jmp_refresh=;');
+      expect(clearHeader).toContain('Path=/api/v1/auth');
+      expect(clearHeader).toContain('HttpOnly');
+      expect(clearHeader).toContain('SameSite=Lax');
+      expect(clearHeader).not.toContain('Domain=');
+      expect(clearHeader).not.toContain('Max-Age');
+
+      expect(mockSessionRepo.sessions[0]!.revokedAt).not.toBeNull();
+      expect(mockSessionRepo.sessions[1]!.revokedAt).toBeNull();
+
+      // Device 1 cookie can no longer refresh
+      await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', device1Cookie)
+        .expect(401);
+
+      // Device 2 cookie still refreshes cleanly
+      await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', device2Cookie)
+        .expect(200);
+
+      // Idempotent logout with missing or unknown cookie still clears cookie & returns 200
+      const idempotentRes = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Origin', 'http://localhost:5173')
+        .expect(200);
+      expect(idempotentRes.body).toEqual({ data: { loggedOut: true } });
+      expect(idempotentRes.headers['set-cookie']).toBeDefined();
+    });
+
+    it('uses __Secure- cookie name and Secure flag on refresh and logout clear in production mode', async () => {
+      const customApp = createApp({
+        corsOrigins: ['https://app.example.com'],
+        identity: {
+          userRepository: mockRepo,
+          passwordHasher: hasher,
+          sessionRepository: mockSessionRepo,
+          accessTokenService,
+          refreshTokenService,
+          isProduction: true,
+          refreshCookieSameSite: 'strict',
+          clock: () => new Date(nowMs),
+        },
+      });
+
+      mockRepo.users.push({
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        displayName: 'Abebe Bikila',
+        email: 'abebe@example.com',
+        passwordHash: await hasher.hash(validPayload.password),
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date(nowMs),
+        createdAt: new Date(nowMs),
+        updatedAt: new Date(nowMs),
+      });
+
+      const loginRes = await request(customApp)
+        .post('/api/v1/auth/login')
+        .set('Origin', 'https://app.example.com')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+
+      const loginCookie = getFirstSetCookie(loginRes.headers).split(';')[0]!;
+      expect(loginCookie).toContain('__Secure-jmp_refresh=');
+
+      const refreshRes = await request(customApp)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'https://app.example.com')
+        .set('Cookie', loginCookie)
+        .expect(200);
+      const rotatedCookie = getFirstSetCookie(refreshRes.headers);
+      expect(rotatedCookie).toContain('__Secure-jmp_refresh=');
+      expect(rotatedCookie).toContain('Secure');
+      expect(rotatedCookie).toContain('SameSite=Strict');
+      expect(rotatedCookie).toContain('Path=/api/v1/auth');
+
+      const logoutRes = await request(customApp)
+        .post('/api/v1/auth/logout')
+        .set('Origin', 'https://app.example.com')
+        .set('Cookie', rotatedCookie.split(';')[0]!)
+        .expect(200);
+      const clearedCookie = getFirstSetCookie(logoutRes.headers);
+      expect(clearedCookie).toContain('__Secure-jmp_refresh=;');
+      expect(clearedCookie).toContain('Secure');
+      expect(clearedCookie).toContain('SameSite=Strict');
+      expect(clearedCookie).toContain('Path=/api/v1/auth');
     });
   });
 });

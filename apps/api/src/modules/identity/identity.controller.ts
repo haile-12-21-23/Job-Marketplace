@@ -9,7 +9,9 @@ import type { RegisterUserUseCase } from './application/register-user.use-case.j
 import type { VerifyEmailUseCase } from './application/verify-email.use-case.js';
 import type { ResendVerificationUseCase } from './application/resend-verification.use-case.js';
 import type { LoginUseCase } from './application/login.use-case.js';
-import type { RefreshCookieSpec } from './domain/refresh-token.js';
+import type { RefreshSessionUseCase } from './application/refresh-session.use-case.js';
+import type { LogoutSessionUseCase } from './application/logout-session.use-case.js';
+import { extractRefreshCookieToken, type RefreshCookieSpec } from './domain/refresh-token.js';
 
 export class IdentityController {
   constructor(
@@ -17,6 +19,8 @@ export class IdentityController {
     private readonly verifyEmailUseCase: VerifyEmailUseCase,
     private readonly resendVerificationUseCase: ResendVerificationUseCase,
     private readonly loginUseCase: LoginUseCase,
+    private readonly refreshSessionUseCase: RefreshSessionUseCase,
+    private readonly logoutSessionUseCase: LogoutSessionUseCase,
     private readonly refreshCookieSpec: RefreshCookieSpec,
   ) {}
 
@@ -64,6 +68,54 @@ export class IdentityController {
         .cookie(this.refreshCookieSpec.name, result.refreshToken, this.refreshCookieSpec.options)
         .status(200)
         .json({ data: result.response });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.set({
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      });
+
+      const parsedCookie = extractRefreshCookieToken(
+        req.headers.cookie,
+        this.refreshCookieSpec.name,
+      );
+      const rawRefreshToken = parsedCookie.status === 'present' ? parsedCookie.token : null;
+
+      const result = await this.refreshSessionUseCase.execute(rawRefreshToken);
+
+      res
+        .cookie(this.refreshCookieSpec.name, result.refreshToken, this.refreshCookieSpec.options)
+        .status(200)
+        .json({ data: result.response });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  logout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.set({
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      });
+
+      const parsedCookie = extractRefreshCookieToken(
+        req.headers.cookie,
+        this.refreshCookieSpec.name,
+      );
+      const rawRefreshToken = parsedCookie.status === 'present' ? parsedCookie.token : null;
+
+      const result = await this.logoutSessionUseCase.execute(rawRefreshToken);
+
+      res
+        .clearCookie(this.refreshCookieSpec.name, this.refreshCookieSpec.clearOptions)
+        .status(200)
+        .json({ data: result });
     } catch (err) {
       next(err);
     }

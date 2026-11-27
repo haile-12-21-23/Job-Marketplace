@@ -132,6 +132,9 @@ describe('baseApi & getApiBaseUrl', () => {
       expiresIn: null,
       expiresAt: null,
       user: null,
+      status: 'unauthenticated',
+      authNotice: null,
+      authNoticeKind: null,
     });
   });
 });

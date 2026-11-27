@@ -3,6 +3,8 @@ import {
   jobSearchQuerySchema,
   loginRequestSchema,
   loginResponseDataSchema,
+  logoutResponseEnvelopeSchema,
+  refreshResponseEnvelopeSchema,
   registerRequestSchema,
   resendVerificationRequestSchema,
   verifyEmailRequestSchema,
@@ -11,6 +13,8 @@ import {
   type DataEnvelope,
   type LoginRequest,
   type LoginResponseData,
+  type LogoutResponse,
+  type RefreshResponse,
   type RegisterRequest,
   type ResendVerificationRequest,
   type VerifyEmailRequest,
@@ -109,5 +113,11 @@ describe('@jmp/web -> @jmp/contracts integration', () => {
       user: { id: sampleUuid, displayName: 'Haile', email: 'haile@example.com' },
     };
     expect(loginResponseDataSchema.parse(loginDto).tokenType).toBe('Bearer');
+
+    const refreshRes: RefreshResponse = { data: loginDto };
+    expect(refreshResponseEnvelopeSchema.parse(refreshRes).data.tokenType).toBe('Bearer');
+
+    const logoutRes: LogoutResponse = { data: { loggedOut: true } };
+    expect(logoutResponseEnvelopeSchema.parse(logoutRes).data.loggedOut).toBe(true);
   });
 });

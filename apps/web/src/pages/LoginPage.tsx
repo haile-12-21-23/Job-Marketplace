@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { loginRequestSchema, type ProblemDetails } from '@jmp/contracts';
-import { useAppDispatch } from '../app/hooks.js';
-import { setAuthSession } from '../app/auth-slice.js';
-import { useLoginMutation } from '../services/auth-api.js';
+import { useAppDispatch, useAppSelector } from '../app/hooks.js';
+import { clearAuthNotice, selectAuthNotice, setAuthSession } from '../app/auth-slice.js';
+import { useLoginMutation, useLogoutMutation } from '../services/auth-api.js';
 
 interface FieldErrors {
   email?: string | undefined;
@@ -38,11 +38,28 @@ export default function LoginPage(): React.JSX.Element {
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [retryConfirmation, setRetryConfirmation] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const authNotice = useAppSelector(selectAuthNotice);
   const [loginUser, { isLoading }] = useLoginMutation();
+  const [retryLogout, { isLoading: isRetryingLogout }] = useLogoutMutation();
+
+  const handleRetryLogout = async () => {
+    if (isRetryingLogout) {
+      return;
+    }
+
+    try {
+      await retryLogout().unwrap();
+      dispatch(clearAuthNotice());
+      setRetryConfirmation('Your server session has been revoked.');
+    } catch {
+      setRetryConfirmation(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -53,6 +70,8 @@ export default function LoginPage(): React.JSX.Element {
 
     setFieldErrors({});
     setGeneralError(null);
+    setRetryConfirmation(null);
+    dispatch(clearAuthNotice());
 
     const parsed = loginRequestSchema.safeParse({ email, password });
     if (!parsed.success) {
@@ -131,6 +150,36 @@ export default function LoginPage(): React.JSX.Element {
             Access your Job Marketplace account to manage your profile and applications.
           </p>
         </div>
+
+        {authNotice && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+          >
+            <p className="font-medium">{authNotice.message}</p>
+            {authNotice.kind === 'logout_error' && (
+              <button
+                type="button"
+                onClick={handleRetryLogout}
+                disabled={isRetryingLogout}
+                className="mt-2 rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isRetryingLogout ? 'Retrying sign-out...' : 'Retry server sign-out'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {retryConfirmation && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+          >
+            {retryConfirmation}
+          </div>
+        )}
 
         {generalError && (
           <div

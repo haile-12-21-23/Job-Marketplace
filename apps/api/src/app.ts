@@ -101,6 +101,7 @@ export function createApp(options?: AppOptions): express.Application {
   app.use(
     createRootRouter({
       checkDatabaseReadiness: options?.checkDatabaseReadiness,
+      corsOrigins: options?.corsOrigins,
       identity: options?.identity,
     }),
   );

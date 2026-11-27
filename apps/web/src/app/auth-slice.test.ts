@@ -58,6 +58,9 @@ describe('authSlice expiration handling', () => {
       expiresIn: null,
       expiresAt: null,
       user: null,
+      status: 'unauthenticated',
+      authNotice: null,
+      authNoticeKind: null,
     });
   });
 
@@ -100,6 +103,9 @@ describe('authSlice expiration handling', () => {
       expiresIn: null,
       expiresAt: null,
       user: null,
+      status: 'unauthenticated',
+      authNotice: null,
+      authNoticeKind: null,
     });
   });
 

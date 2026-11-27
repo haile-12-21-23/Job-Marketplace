@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { createIdentityRouter, type IdentityRouterOptions } from '../../modules/identity/index.js';
 
 export interface V1RouterOptions {
+  corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
 }
 
@@ -30,9 +31,19 @@ export function createV1Router(options?: V1RouterOptions): Router {
    * POST /api/v1/auth/verify-email
    * POST /api/v1/auth/resend-verification
    * POST /api/v1/auth/login
+   * POST /api/v1/auth/refresh
+   * POST /api/v1/auth/logout
    * Mount auth domain routes under /auth.
    */
-  router.use('/auth', createIdentityRouter(options?.identity));
+  const identityOptions: IdentityRouterOptions | undefined =
+    options?.identity || options?.corsOrigins
+      ? {
+          ...options?.identity,
+          allowedOrigins: options?.identity?.allowedOrigins ?? options?.corsOrigins,
+        }
+      : undefined;
+
+  router.use('/auth', createIdentityRouter(identityOptions));
 
   return router;
 }

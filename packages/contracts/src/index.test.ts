@@ -28,6 +28,10 @@ import {
   loginUserSchema,
   loginResponseDataSchema,
   loginResponseEnvelopeSchema,
+  refreshResponseDataSchema,
+  refreshResponseEnvelopeSchema,
+  logoutResponseDataSchema,
+  logoutResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -51,6 +55,10 @@ import {
   type LoginUser,
   type LoginResponseData,
   type LoginResponse,
+  type RefreshResponseData,
+  type RefreshResponse,
+  type LogoutResponseData,
+  type LogoutResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -105,6 +113,10 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(loginUserSchema).toBeDefined();
     expect(loginResponseDataSchema).toBeDefined();
     expect(loginResponseEnvelopeSchema).toBeDefined();
+    expect(refreshResponseDataSchema).toBeDefined();
+    expect(refreshResponseEnvelopeSchema).toBeDefined();
+    expect(logoutResponseDataSchema).toBeDefined();
+    expect(logoutResponseEnvelopeSchema).toBeDefined();
   });
 
   it('enforces type compatibility through inferred types', () => {
@@ -166,6 +178,10 @@ describe('@jmp/contracts public barrel exports', () => {
       user: loginUser,
     };
     const loginRes: LoginResponse = { data: loginResData };
+    const refreshResData: RefreshResponseData = loginResData;
+    const refreshRes: RefreshResponse = { data: refreshResData };
+    const logoutResData: LogoutResponseData = { loggedOut: true };
+    const logoutRes: LogoutResponse = { data: logoutResData };
 
     expect(output.page).toBe(1);
     expect(paginationOutput.page).toBe(1);
@@ -182,5 +198,7 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(resendRes.data.accepted).toBe(true);
     expect(loginReq.email).toBe('jane@example.com');
     expect(loginRes.data.tokenType).toBe('Bearer');
+    expect(refreshRes.data.tokenType).toBe('Bearer');
+    expect(logoutRes.data.loggedOut).toBe(true);
   });
 });

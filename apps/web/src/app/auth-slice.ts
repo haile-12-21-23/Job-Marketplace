@@ -1,13 +1,19 @@
-import { createSlice, type Middleware, type PayloadAction } from '@reduxjs/toolkit';
+import { createSelector, createSlice, type Middleware, type PayloadAction } from '@reduxjs/toolkit';
 import type { LoginUser } from '@jmp/contracts';
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+export type AuthStatus = 'idle' | 'refreshing' | 'authenticated' | 'unauthenticated';
+export type AuthNoticeKind = 'refresh_error' | 'logout_error';
 
 export interface AuthState {
   accessToken: string | null;
   expiresIn: number | null;
   expiresAt: number | null;
   user: LoginUser | null;
+  status: AuthStatus;
+  authNotice: string | null;
+  authNoticeKind: AuthNoticeKind | null;
 }
 
 export interface SetAuthSessionPayload {
@@ -17,11 +23,19 @@ export interface SetAuthSessionPayload {
   expiresAt?: number;
 }
 
+export interface ClearAuthSessionPayload {
+  notice?: string | null | undefined;
+  noticeKind?: AuthNoticeKind | null | undefined;
+}
+
 const initialState: AuthState = {
   accessToken: null,
   expiresIn: null,
   expiresAt: null,
   user: null,
+  status: 'idle',
+  authNotice: null,
+  authNoticeKind: null,
 };
 
 /**
@@ -51,6 +65,11 @@ export const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
+    beginAuthRefresh: (state) => {
+      state.status = 'refreshing';
+      state.authNotice = null;
+      state.authNoticeKind = null;
+    },
     setAuthSession: {
       reducer: (
         state,
@@ -65,6 +84,9 @@ export const authSlice = createSlice({
         state.expiresIn = action.payload.expiresIn;
         state.expiresAt = action.payload.expiresAt;
         state.user = action.payload.user;
+        state.status = 'authenticated';
+        state.authNotice = null;
+        state.authNoticeKind = null;
       },
       prepare: (payload: SetAuthSessionPayload) => {
         const ttlMs =
@@ -82,16 +104,24 @@ export const authSlice = createSlice({
         };
       },
     },
-    clearAuthSession: (state) => {
+    clearAuthSession: (state, action: PayloadAction<ClearAuthSessionPayload | undefined>) => {
       state.accessToken = null;
       state.expiresIn = null;
       state.expiresAt = null;
       state.user = null;
+      state.status = 'unauthenticated';
+      state.authNotice = action.payload?.notice ?? null;
+      state.authNoticeKind = action.payload?.noticeKind ?? null;
+    },
+    clearAuthNotice: (state) => {
+      state.authNotice = null;
+      state.authNoticeKind = null;
     },
   },
 });
 
-export const { setAuthSession, clearAuthSession } = authSlice.actions;
+export const { beginAuthRefresh, setAuthSession, clearAuthSession, clearAuthNotice } =
+  authSlice.actions;
 
 export const selectAccessToken = (state: { auth: AuthState }): string | null =>
   isAuthSessionExpired(state.auth) ? null : state.auth.accessToken;
@@ -101,6 +131,20 @@ export const selectExpiresAt = (state: { auth: AuthState }): number | null =>
   isAuthSessionExpired(state.auth) ? null : state.auth.expiresAt;
 export const selectIsAuthenticated = (state: { auth: AuthState }): boolean =>
   !isAuthSessionExpired(state.auth);
+export const selectAuthStatus = (state: { auth: AuthState }): AuthStatus => {
+  if (state.auth.accessToken !== null && isAuthSessionExpired(state.auth)) {
+    return 'unauthenticated';
+  }
+  return state.auth.status;
+};
+export const selectAuthNotice = createSelector(
+  [
+    (state: { auth: AuthState }) => state.auth.authNotice,
+    (state: { auth: AuthState }) => state.auth.authNoticeKind,
+  ],
+  (message, kind): { message: string; kind: AuthNoticeKind | null } | null =>
+    message !== null ? { message, kind } : null,
+);
 
 /**
  * Redux middleware that clears the in-memory auth session once its absolute `expiresAt`

@@ -2,6 +2,8 @@ import { baseApi } from './base-api.js';
 import type {
   LoginRequest,
   LoginResponse,
+  LogoutResponse,
+  RefreshResponse,
   RegisterRequest,
   RegisterResponse,
   ResendVerificationRequest,
@@ -45,6 +47,20 @@ export const authApi = baseApi.injectEndpoints({
         credentials: 'include',
       }),
     }),
+    refresh: builder.mutation<RefreshResponse, void>({
+      query: () => ({
+        url: '/auth/refresh',
+        method: 'POST',
+        credentials: 'include',
+      }),
+    }),
+    logout: builder.mutation<LogoutResponse, void>({
+      query: () => ({
+        url: '/auth/logout',
+        method: 'POST',
+        credentials: 'include',
+      }),
+    }),
   }),
 });
 
@@ -53,4 +69,6 @@ export const {
   useVerifyEmailMutation,
   useResendVerificationMutation,
   useLoginMutation,
+  useRefreshMutation,
+  useLogoutMutation,
 } = authApi;
