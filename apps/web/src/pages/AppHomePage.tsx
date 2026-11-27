@@ -20,6 +20,21 @@ export default function AppHomePage(): React.JSX.Element {
           </p>
         </div>
 
+        <div className="mt-6 rounded-xl border border-brand-teal/25 bg-brand-soft/60 p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-brand-navy">Individual Employer Account</h2>
+            <p className="mt-1 text-xs text-brand-muted">
+              Set up your individual employer profile to establish your hiring account.
+            </p>
+          </div>
+          <Link
+            to="/app/employer-accounts/new"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[#12263b]"
+          >
+            Create Individual Employer Account
+          </Link>
+        </div>
+
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
             {

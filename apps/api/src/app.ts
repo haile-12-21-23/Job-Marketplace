@@ -10,6 +10,7 @@ import { notFound } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRootRouter } from './routes/index.js';
 import type { AuthorizationContext, AuthorizationOptions } from './modules/authorization/index.js';
+import type { EmployerAccountsRouterOptions } from './modules/employer-accounts/index.js';
 import type { IdentityRouterOptions } from './modules/identity/index.js';
 
 export interface AppOptions {
@@ -18,6 +19,7 @@ export interface AppOptions {
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
   identity?: IdentityRouterOptions | undefined;
   authorization?: AuthorizationOptions | undefined;
+  employerAccounts?: Omit<EmployerAccountsRouterOptions, 'authorization'> | undefined;
   onMountV1Routes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
@@ -108,6 +110,7 @@ export function createApp(options?: AppOptions): express.Application {
       corsOrigins: options?.corsOrigins,
       identity: options?.identity,
       authorization: options?.authorization,
+      employerAccounts: options?.employerAccounts,
       onMountV1Routes: options?.onMountV1Routes,
     }),
   );

@@ -2,6 +2,7 @@ import { AppError } from '../../../errors/app-error.js';
 import {
   EmployerRole,
   EmployerStatus,
+  EmployerType,
   MembershipStatus,
   UserStatus,
 } from '../../../generated/prisma/enums.js';
@@ -26,6 +27,7 @@ export interface AuthorizationServiceOptions {
 
 export interface AssertEmployerAccessInput {
   employerAccountId: string;
+  requiredAccountType?: EmployerType | undefined;
   allowedMembershipRoles?: ReadonlyArray<EmployerRole> | undefined;
   requireOwner?: boolean | undefined;
 }
@@ -170,7 +172,11 @@ export class AuthorizationService {
       principal.userId,
     );
 
-    if (!account || account.accountStatus !== EmployerStatus.ACTIVE) {
+    if (
+      !account ||
+      account.accountStatus !== EmployerStatus.ACTIVE ||
+      (input.requiredAccountType !== undefined && account.accountType !== input.requiredAccountType)
+    ) {
       throw employerAccountNotFoundError();
     }
 

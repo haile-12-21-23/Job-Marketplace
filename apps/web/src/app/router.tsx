@@ -10,6 +10,8 @@ import LoginPage from '../pages/LoginPage.js';
 import ForgotPasswordPage from '../pages/ForgotPasswordPage.js';
 import ResetPasswordPage from '../pages/ResetPasswordPage.js';
 import AppHomePage from '../pages/AppHomePage.js';
+import CreateIndividualEmployerAccountPage from '../pages/CreateIndividualEmployerAccountPage.js';
+import IndividualEmployerAccountPage from '../pages/IndividualEmployerAccountPage.js';
 import NotFoundPage from '../pages/NotFoundPage.js';
 import RequireAuthGuard from '../components/auth/RequireAuthGuard.js';
 
@@ -59,6 +61,14 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <AppHomePage />,
+      },
+      {
+        path: 'employer-accounts/new',
+        element: <CreateIndividualEmployerAccountPage />,
+      },
+      {
+        path: 'employer-accounts/:employerAccountId',
+        element: <IndividualEmployerAccountPage />,
       },
     ],
   },

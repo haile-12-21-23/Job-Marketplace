@@ -424,4 +424,20 @@ describe('React Router configuration and routes', () => {
     expect(screen.getByLabelText('New Password')).toBeDefined();
     expect(screen.getByLabelText('Confirm New Password')).toBeDefined();
   });
+
+  it('guards employer account routes behind authentication and navigates from workspace CTA when signed in', async () => {
+    const user = userEvent.setup();
+    renderWithRouter('/app/employer-accounts/new');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeDefined();
+
+    renderWithRouter('/app', true);
+    const ctaLink = await screen.findByRole('link', {
+      name: 'Create Individual Employer Account',
+    });
+    expect(ctaLink.getAttribute('href')).toBe('/app/employer-accounts/new');
+    await user.click(ctaLink);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Create Individual Employer Account' }),
+    ).toBeDefined();
+  });
 });

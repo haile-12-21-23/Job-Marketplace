@@ -70,7 +70,7 @@ const baseQueryWithAuthExpiry: BaseQueryFn<
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithAuthExpiry,
-  tagTypes: ['ServiceStatus'],
+  tagTypes: ['ServiceStatus', 'EmployerAccount'],
   endpoints: (builder) => ({
     getServiceStatus: builder.query<ServiceMetadataResponse, void>({
       query: () => '',

@@ -454,6 +454,15 @@ describe('AuthorizationService', () => {
           requireOwner: true,
         }),
       ).rejects.toMatchObject({ statusCode: 403, code: 'INSUFFICIENT_PERMISSIONS' });
+
+      // Account type mismatch must return non-leaking 404 before requireOwner throws 403
+      await expect(
+        fx.service.assertEmployerAccess(memberPrincipal, {
+          employerAccountId,
+          requiredAccountType: EmployerType.INDIVIDUAL,
+          requireOwner: true,
+        }),
+      ).rejects.toMatchObject({ statusCode: 404, code: 'EMPLOYER_ACCOUNT_NOT_FOUND' });
     });
   });
 });

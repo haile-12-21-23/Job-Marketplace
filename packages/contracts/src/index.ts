@@ -98,3 +98,27 @@ export {
   type ConfirmPasswordResetResponseData,
   type ConfirmPasswordResetResponse,
 } from './auth/index.js';
+
+// Employer account contracts
+export {
+  EMPLOYER_STATUS_VALUES,
+  VERIFICATION_STATUS_VALUES,
+  employerStatusSchema,
+  verificationStatusSchema,
+  createIndividualEmployerAccountRequestSchema,
+  updateIndividualEmployerProfileRequestSchema,
+  individualEmployerProfileDtoSchema,
+  individualEmployerAccountDtoSchema,
+  createIndividualEmployerAccountResponseEnvelopeSchema,
+  getIndividualEmployerAccountResponseEnvelopeSchema,
+  updateIndividualEmployerProfileResponseEnvelopeSchema,
+  type EmployerAccountStatus,
+  type EmployerVerificationStatus,
+  type CreateIndividualEmployerAccountRequest,
+  type UpdateIndividualEmployerProfileRequest,
+  type IndividualEmployerProfileDto,
+  type IndividualEmployerAccountDto,
+  type CreateIndividualEmployerAccountResponse,
+  type GetIndividualEmployerAccountResponse,
+  type UpdateIndividualEmployerProfileResponse,
+} from './employer/index.js';

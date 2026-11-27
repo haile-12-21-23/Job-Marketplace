@@ -38,6 +38,17 @@ import {
   confirmPasswordResetRequestSchema,
   confirmPasswordResetResponseDataSchema,
   confirmPasswordResetResponseEnvelopeSchema,
+  EMPLOYER_STATUS_VALUES,
+  VERIFICATION_STATUS_VALUES,
+  employerStatusSchema,
+  verificationStatusSchema,
+  createIndividualEmployerAccountRequestSchema,
+  updateIndividualEmployerProfileRequestSchema,
+  individualEmployerProfileDtoSchema,
+  individualEmployerAccountDtoSchema,
+  createIndividualEmployerAccountResponseEnvelopeSchema,
+  getIndividualEmployerAccountResponseEnvelopeSchema,
+  updateIndividualEmployerProfileResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -71,6 +82,15 @@ import {
   type ConfirmPasswordResetRequest,
   type ConfirmPasswordResetResponseData,
   type ConfirmPasswordResetResponse,
+  type EmployerAccountStatus,
+  type EmployerVerificationStatus,
+  type CreateIndividualEmployerAccountRequest,
+  type UpdateIndividualEmployerProfileRequest,
+  type IndividualEmployerProfileDto,
+  type IndividualEmployerAccountDto,
+  type CreateIndividualEmployerAccountResponse,
+  type GetIndividualEmployerAccountResponse,
+  type UpdateIndividualEmployerProfileResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -237,5 +257,46 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(reqResetRes.data.accepted).toBe(true);
     expect(confirmResetReq.token).toBe('reset_token');
     expect(confirmResetRes.data.reset).toBe(true);
+
+    expect(EMPLOYER_STATUS_VALUES).toContain('ACTIVE');
+    expect(VERIFICATION_STATUS_VALUES).toContain('UNVERIFIED');
+    expect(employerStatusSchema).toBeDefined();
+    expect(verificationStatusSchema).toBeDefined();
+    expect(createIndividualEmployerAccountRequestSchema).toBeDefined();
+    expect(updateIndividualEmployerProfileRequestSchema).toBeDefined();
+    expect(individualEmployerProfileDtoSchema).toBeDefined();
+    expect(individualEmployerAccountDtoSchema).toBeDefined();
+    expect(createIndividualEmployerAccountResponseEnvelopeSchema).toBeDefined();
+    expect(getIndividualEmployerAccountResponseEnvelopeSchema).toBeDefined();
+    expect(updateIndividualEmployerProfileResponseEnvelopeSchema).toBeDefined();
+
+    const empStatus: EmployerAccountStatus = 'ACTIVE';
+    const empVerif: EmployerVerificationStatus = 'UNVERIFIED';
+    const empCreateReq: CreateIndividualEmployerAccountRequest = { publicName: 'Solo Studio' };
+    const empPatchReq: UpdateIndividualEmployerProfileRequest = { publicName: 'Updated Studio' };
+    const empProfile: IndividualEmployerProfileDto = {
+      publicName: 'Solo Studio',
+      contactPhone: null,
+      countryCode: 'ET',
+      city: 'Addis Ababa',
+      updatedAt: '2026-11-27T14:00:00.000Z',
+    };
+    const empDto: IndividualEmployerAccountDto = {
+      id: publicId,
+      type: 'INDIVIDUAL',
+      status: empStatus,
+      verificationStatus: empVerif,
+      createdAt: '2026-11-27T14:00:00.000Z',
+      updatedAt: '2026-11-27T14:00:00.000Z',
+      profile: empProfile,
+    };
+    const empCreateRes: CreateIndividualEmployerAccountResponse = { data: empDto };
+    const empGetRes: GetIndividualEmployerAccountResponse = { data: empDto };
+    const empPatchRes: UpdateIndividualEmployerProfileResponse = { data: empDto };
+    expect(empCreateReq.publicName).toBe('Solo Studio');
+    expect(empPatchReq.publicName).toBe('Updated Studio');
+    expect(empCreateRes.data.id).toBe(publicId);
+    expect(empGetRes.data.type).toBe('INDIVIDUAL');
+    expect(empPatchRes.data.status).toBe('ACTIVE');
   });
 });

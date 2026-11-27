@@ -1,11 +1,12 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import type { EmployerRole } from '../../../generated/prisma/enums.js';
+import type { EmployerRole, EmployerType } from '../../../generated/prisma/enums.js';
 import type { AuthorizationService } from '../application/authorization.service.js';
 import type { PlatformPermissionCode } from '../authorization.catalogue.js';
 
 export interface EmployerAccessGuardOptions {
   paramName?: string | undefined;
   resolveEmployerAccountId?: ((req: Request) => string | undefined) | undefined;
+  requiredAccountType?: EmployerType | undefined;
   allowedMembershipRoles?: ReadonlyArray<EmployerRole> | undefined;
   requireOwner?: boolean | undefined;
 }
@@ -59,6 +60,7 @@ export function createAuthorizationGuards(
 
         req.employerAccess = await authorizationService.assertEmployerAccess(req.auth, {
           employerAccountId,
+          requiredAccountType: options?.requiredAccountType,
           allowedMembershipRoles: options?.allowedMembershipRoles,
           requireOwner: options?.requireOwner,
         });
