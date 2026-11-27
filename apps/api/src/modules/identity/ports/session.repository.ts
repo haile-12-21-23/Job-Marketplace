@@ -80,7 +80,13 @@ export interface SessionRepository {
   findRotationCandidateByTokenHash(
     refreshTokenHash: string,
   ): Promise<SessionRotationCandidate | null>;
+  findSessionCandidateByIdAndUserId(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionRotationCandidate | null>;
   rotateSession(input: RotateSessionInput): Promise<RotateSessionResult>;
   revokeFamilyIfReplayed(refreshTokenHash: string, now: Date): Promise<ReplayCheckResult>;
   revokeFamilyByTokenHash(refreshTokenHash: string, now: Date): Promise<RevokeFamilyResult>;
 }
+
+export type PrincipalSessionLookup = Pick<SessionRepository, 'findSessionCandidateByIdAndUserId'>;

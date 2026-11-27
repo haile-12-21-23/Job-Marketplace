@@ -100,6 +100,10 @@ class InMemorySessionRepo implements SessionRepository {
     return null;
   }
 
+  async findSessionCandidateByIdAndUserId(): Promise<SessionRotationCandidate | null> {
+    return null;
+  }
+
   async rotateSession(_input: RotateSessionInput): Promise<RotateSessionResult> {
     return { outcome: 'not_found' };
   }

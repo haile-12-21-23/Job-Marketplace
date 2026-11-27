@@ -80,6 +80,7 @@ export {
   type SessionRotationCandidate,
   type SessionUserEligibility,
   type UserSessionRecord,
+  type PrincipalSessionLookup,
 } from './ports/session.repository.js';
 export {
   type PasswordResetTokenRepository,

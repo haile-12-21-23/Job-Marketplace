@@ -1,5 +1,5 @@
 import express from 'express';
-import type { Request } from 'express';
+import type { Request, Router } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -9,6 +9,7 @@ import { requestId } from './middleware/request-id.js';
 import { notFound } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRootRouter } from './routes/index.js';
+import type { AuthorizationContext, AuthorizationOptions } from './modules/authorization/index.js';
 import type { IdentityRouterOptions } from './modules/identity/index.js';
 
 export interface AppOptions {
@@ -16,6 +17,8 @@ export interface AppOptions {
   trustProxy?: boolean | undefined;
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
   identity?: IdentityRouterOptions | undefined;
+  authorization?: AuthorizationOptions | undefined;
+  onMountV1Routes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
 /**
@@ -104,6 +107,8 @@ export function createApp(options?: AppOptions): express.Application {
       checkDatabaseReadiness: options?.checkDatabaseReadiness,
       corsOrigins: options?.corsOrigins,
       identity: options?.identity,
+      authorization: options?.authorization,
+      onMountV1Routes: options?.onMountV1Routes,
     }),
   );
 

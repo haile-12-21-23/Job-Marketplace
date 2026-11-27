@@ -3,12 +3,15 @@ import type { Request, Response } from 'express';
 import { createV1Router, v1Router } from './v1/index.js';
 import { createHealthRouter } from './health.js';
 import { checkDatabaseReadiness } from '../infrastructure/database/prisma.js';
+import type { AuthorizationContext, AuthorizationOptions } from '../modules/authorization/index.js';
 import type { IdentityRouterOptions } from '../modules/identity/index.js';
 
 export interface RootRouterOptions {
   checkDatabaseReadiness?: (() => Promise<void>) | undefined;
   corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
+  authorization?: AuthorizationOptions | undefined;
+  onMountV1Routes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
 export function createRootRouter(options?: RootRouterOptions): Router {
@@ -35,10 +38,21 @@ export function createRootRouter(options?: RootRouterOptions): Router {
   );
 
   /** Mount version-prefixed product API. */
+  const hasCustomV1Options =
+    options?.identity !== undefined ||
+    options?.corsOrigins !== undefined ||
+    options?.authorization !== undefined ||
+    options?.onMountV1Routes !== undefined;
+
   rootRouter.use(
     '/api/v1',
-    options?.identity !== undefined || options?.corsOrigins !== undefined
-      ? createV1Router({ corsOrigins: options?.corsOrigins, identity: options?.identity })
+    hasCustomV1Options
+      ? createV1Router({
+          corsOrigins: options?.corsOrigins,
+          identity: options?.identity,
+          authorization: options?.authorization,
+          onMountRoutes: options?.onMountV1Routes,
+        })
       : v1Router,
   );
 
