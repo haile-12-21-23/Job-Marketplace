@@ -13,8 +13,13 @@ import {
   PasswordResetOutboxDispatcher,
   PasswordResetRateLimiter,
   PrismaPasswordResetOutboxRepository,
+  PrismaSessionRepository,
   ResendRateLimiter,
 } from './modules/identity/index.js';
+import {
+  PrismaEmployerAccessRepository,
+  PrismaPermissionRepository,
+} from './modules/authorization/index.js';
 
 // ── Environment Validation (Startup Boundary) ────────────────────────────────
 let config: ApiConfig;
@@ -40,6 +45,15 @@ const PORT = config.port;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const emailSender = createEmailSender(config);
+const accessTokenService = new JoseAccessTokenService({
+  secret: config.authAccessTokenSecret,
+  ttlSeconds: config.authAccessTokenTtlSeconds,
+  issuer: config.authAccessTokenIssuer,
+  audience: config.authAccessTokenAudience,
+});
+const sessionRepository = new PrismaSessionRepository();
+const permissionRepository = new PrismaPermissionRepository();
+const employerAccessRepository = new PrismaEmployerAccessRepository();
 const passwordResetOutboxRepository = new PrismaPasswordResetOutboxRepository();
 const passwordResetOutboxDispatcher = new PasswordResetOutboxDispatcher({
   outboxRepository: passwordResetOutboxRepository,
@@ -60,12 +74,8 @@ const app = createApp({
       emailMax: config.emailVerificationResendEmailMax,
       emailWindowSeconds: config.emailVerificationResendEmailWindowSeconds,
     }),
-    accessTokenService: new JoseAccessTokenService({
-      secret: config.authAccessTokenSecret,
-      ttlSeconds: config.authAccessTokenTtlSeconds,
-      issuer: config.authAccessTokenIssuer,
-      audience: config.authAccessTokenAudience,
-    }),
+    sessionRepository,
+    accessTokenService,
     loginRateLimiter: new LoginRateLimiter({
       ipMax: config.authLoginRateLimitIpMax,
       ipWindowSeconds: config.authLoginRateLimitIpWindowSeconds,
@@ -87,6 +97,12 @@ const app = createApp({
     refreshTokenTtlDays: config.authRefreshTokenTtlDays,
     refreshCookieSameSite: config.authRefreshCookieSameSite,
     isProduction: config.nodeEnv === 'production',
+  },
+  authorization: {
+    accessTokenService,
+    sessionRepository,
+    permissionRepository,
+    employerAccessRepository,
   },
 });
 const server = http.createServer(app);

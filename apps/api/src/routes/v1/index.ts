@@ -1,11 +1,18 @@
 import { Router } from 'express';
 import { API_VERSION } from '@jmp/contracts';
 import type { Request, Response } from 'express';
+import {
+  createAuthorizationContext,
+  type AuthorizationContext,
+  type AuthorizationOptions,
+} from '../../modules/authorization/index.js';
 import { createIdentityRouter, type IdentityRouterOptions } from '../../modules/identity/index.js';
 
 export interface V1RouterOptions {
   corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
+  authorization?: AuthorizationOptions | undefined;
+  onMountRoutes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
 export function createV1Router(options?: V1RouterOptions): Router {
@@ -26,16 +33,20 @@ export function createV1Router(options?: V1RouterOptions): Router {
     });
   });
 
+  const authorization = createAuthorizationContext({
+    accessTokenService:
+      options?.authorization?.accessTokenService ?? options?.identity?.accessTokenService,
+    sessionRepository:
+      options?.authorization?.sessionRepository ?? options?.identity?.sessionRepository,
+    permissionRepository: options?.authorization?.permissionRepository,
+    employerAccessRepository: options?.authorization?.employerAccessRepository,
+    clock: options?.authorization?.clock ?? options?.identity?.clock,
+  });
+
   /**
-   * POST /api/v1/auth/register
-   * POST /api/v1/auth/verify-email
-   * POST /api/v1/auth/resend-verification
-   * POST /api/v1/auth/login
-   * POST /api/v1/auth/refresh
-   * POST /api/v1/auth/logout
-   * POST /api/v1/auth/password-reset/request
-   * POST /api/v1/auth/password-reset/confirm
-   * Mount auth domain routes under /auth.
+   * Public and session-cookie identity endpoints under /auth.
+   * Bearer auth middleware is NOT applied globally here so login, registration, verification,
+   * password reset, refresh, and logout preserve their existing boundaries.
    */
   const identityOptions: IdentityRouterOptions | undefined =
     options?.identity || options?.corsOrigins
@@ -46,6 +57,10 @@ export function createV1Router(options?: V1RouterOptions): Router {
       : undefined;
 
   router.use('/auth', createIdentityRouter(identityOptions));
+
+  if (options?.onMountRoutes) {
+    options.onMountRoutes(router, authorization);
+  }
 
   return router;
 }

@@ -63,6 +63,24 @@ class InMemorySessionRepository implements SessionRepository {
     };
   }
 
+  async findSessionCandidateByIdAndUserId(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionRotationCandidate | null> {
+    const session = this.sessions.find((s) => s.id === sessionId && s.userId === userId);
+    if (!session) return null;
+    return {
+      session: { ...session },
+      user: {
+        id: session.userId,
+        displayName: 'Abebe Bikila',
+        email: 'abebe@example.com',
+        status: this.userStatus,
+        emailVerifiedAt: this.emailVerifiedAt,
+      },
+    };
+  }
+
   async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
     this.rotateCalls++;
     if (this.forceRotateOutcome) {

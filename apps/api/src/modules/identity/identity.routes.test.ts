@@ -149,6 +149,27 @@ class MockSessionRepository implements SessionRepository {
     };
   }
 
+  async findSessionCandidateByIdAndUserId(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionRotationCandidate | null> {
+    const session = this.sessions.find((s) => s.id === sessionId && s.userId === userId);
+    if (!session) return null;
+    const user = this.userRepo.users.find((u) => u.id === session.userId);
+    if (!user) return null;
+
+    return {
+      session: { ...session },
+      user: {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        status: user.status,
+        emailVerifiedAt: user.emailVerifiedAt,
+      },
+    };
+  }
+
   async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
     const session = this.sessions.find((s) => s.refreshTokenHash === input.presentedTokenHash);
     if (!session) return { outcome: 'not_found' };

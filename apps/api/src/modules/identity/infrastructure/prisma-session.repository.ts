@@ -128,6 +128,37 @@ function mapSessionRecord(session: {
   };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function mapSessionWithUserCandidate(
+  record: {
+    id: string;
+    userId: string;
+    tokenFamilyId: string;
+    refreshTokenHash: string;
+    parentSessionId: string | null;
+    expiresAt: Date;
+    revokedAt: Date | null;
+    createdAt: Date;
+    user: {
+      id: string;
+      displayName: string;
+      email: string;
+      status: UserStatus;
+      emailVerifiedAt: Date | null;
+    };
+  } | null,
+): SessionRotationCandidate | null {
+  if (!record) {
+    return null;
+  }
+
+  return {
+    session: mapSessionRecord(record),
+    user: record.user,
+  };
+}
+
 export class PrismaSessionRepository implements SessionRepository {
   private readonly client: PrismaClient;
 
@@ -209,14 +240,36 @@ export class PrismaSessionRepository implements SessionRepository {
       },
     });
 
-    if (!record) {
+    return mapSessionWithUserCandidate(record);
+  }
+
+  async findSessionCandidateByIdAndUserId(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionRotationCandidate | null> {
+    if (!UUID_RE.test(sessionId) || !UUID_RE.test(userId)) {
       return null;
     }
 
-    return {
-      session: mapSessionRecord(record),
-      user: record.user,
-    };
+    const record = await this.client.userSession.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            status: true,
+            emailVerifiedAt: true,
+          },
+        },
+      },
+    });
+
+    return mapSessionWithUserCandidate(record);
   }
 
   async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
