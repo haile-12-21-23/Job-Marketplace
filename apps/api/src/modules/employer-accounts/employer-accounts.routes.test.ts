@@ -498,7 +498,7 @@ describe('Employer Accounts Routes (/api/v1/employer-accounts)', () => {
       expect(r.body.code).toBe('EMPLOYER_ACCOUNT_NOT_FOUND');
     }
 
-    // Organization account owned by caller is NOT serialized as an individual account (returns 404)
+    // Organization account (even for owner or active non-owner member) returns non-leaking 404 on GET and PATCH
     const orgId = randomUUID();
     accounts.set(orgId, {
       id: orgId,
@@ -509,7 +509,12 @@ describe('Employer Accounts Routes (/api/v1/employer-accounts)', () => {
       createdAt: new Date(nowMs),
       updatedAt: new Date(nowMs),
       profile: null,
-      memberships: new Map(),
+      memberships: new Map([
+        [
+          memberId,
+          { id: 'm-org-admin', role: EmployerRole.ADMIN, status: MembershipStatus.ACTIVE },
+        ],
+      ]),
     });
 
     await request(app)
@@ -521,5 +526,18 @@ describe('Employer Accounts Routes (/api/v1/employer-accounts)', () => {
       .set('Authorization', `Bearer ${owner.token}`)
       .send({ publicName: 'Should Fail' })
       .expect(404);
+
+    const orgMemberGetRes = await request(app)
+      .get(`/api/v1/employer-accounts/${orgId}`)
+      .set('Authorization', `Bearer ${activeMember.token}`)
+      .expect(404);
+    expect(orgMemberGetRes.body.code).toBe('EMPLOYER_ACCOUNT_NOT_FOUND');
+
+    const orgMemberPatchRes = await request(app)
+      .patch(`/api/v1/employer-accounts/${orgId}`)
+      .set('Authorization', `Bearer ${activeMember.token}`)
+      .send({ publicName: 'Should Also Return 404' })
+      .expect(404);
+    expect(orgMemberPatchRes.body.code).toBe('EMPLOYER_ACCOUNT_NOT_FOUND');
   });
 });

@@ -4,6 +4,7 @@ import {
   updateIndividualEmployerProfileRequestSchema,
 } from '@jmp/contracts';
 import { validateBody } from '../../middleware/validate.js';
+import { EmployerType } from '../../generated/prisma/enums.js';
 import { createAuthorizationContext, type AuthorizationContext } from '../authorization/index.js';
 import { CreateIndividualEmployerAccountUseCase } from './application/create-individual-employer-account.use-case.js';
 import { GetIndividualEmployerAccountUseCase } from './application/get-individual-employer-account.use-case.js';
@@ -45,14 +46,19 @@ export function createEmployerAccountsRouter(options?: EmployerAccountsRouterOpt
   router.get(
     '/:employerAccountId',
     authorization.guards.authenticate,
-    authorization.guards.requireEmployerAccess(),
+    authorization.guards.requireEmployerAccess({
+      requiredAccountType: EmployerType.INDIVIDUAL,
+    }),
     controller.getById,
   );
 
   router.patch(
     '/:employerAccountId',
     authorization.guards.authenticate,
-    authorization.guards.requireEmployerAccess({ requireOwner: true }),
+    authorization.guards.requireEmployerAccess({
+      requiredAccountType: EmployerType.INDIVIDUAL,
+      requireOwner: true,
+    }),
     validateBody(updateIndividualEmployerProfileRequestSchema),
     controller.updateProfile,
   );
