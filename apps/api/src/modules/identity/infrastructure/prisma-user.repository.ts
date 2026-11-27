@@ -2,7 +2,12 @@ import { PrismaClient } from '../../../generated/prisma/client.js';
 import { UserStatus } from '../../../generated/prisma/enums.js';
 import { prisma as lazyPrisma } from '../../../infrastructure/database/prisma.js';
 import { AppError } from '../../../errors/app-error.js';
-import type { UserRepository, CreateUserInput, UserRecord } from '../ports/user.repository.js';
+import type {
+  UserRepository,
+  CreateUserInput,
+  UserRecord,
+  UserCredentialRecord,
+} from '../ports/user.repository.js';
 
 export class PrismaUserRepository implements UserRepository {
   private readonly client: PrismaClient;
@@ -29,6 +34,26 @@ export class PrismaUserRepository implements UserRepository {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  async findCredentialsByEmail(normalizedEmail: string): Promise<UserCredentialRecord | null> {
+    const user = await this.client.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+        emailVerifiedAt: true,
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return user;
   }
 
   async create(data: CreateUserInput): Promise<UserRecord> {

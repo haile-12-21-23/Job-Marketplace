@@ -1,5 +1,12 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import {
+  createApi,
+  fetchBaseQuery,
+  type BaseQueryFn,
+  type FetchArgs,
+  type FetchBaseQueryError,
+} from '@reduxjs/toolkit/query/react';
 import type { DataEnvelope } from '@jmp/contracts';
+import { clearAuthSession, isAuthSessionExpired, type AuthState } from '../app/auth-slice.js';
 
 /**
  * Service metadata contract returned by GET /api/v1.
@@ -27,15 +34,42 @@ export function getApiBaseUrl(): string {
   return rawUrl.replace(/\/+$/, '');
 }
 
+interface StoreAuthSliceShape {
+  auth?: AuthState;
+}
+
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: getApiBaseUrl(),
+  credentials: 'include',
+  prepareHeaders: (headers, { getState }) => {
+    const auth = (getState() as StoreAuthSliceShape).auth;
+    if (auth && !isAuthSessionExpired(auth) && auth.accessToken) {
+      headers.set('Authorization', `Bearer ${auth.accessToken}`);
+    }
+    return headers;
+  },
+});
+
+const baseQueryWithAuthExpiry: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  const auth = (api.getState() as StoreAuthSliceShape).auth;
+  if (auth && auth.accessToken !== null && isAuthSessionExpired(auth)) {
+    api.dispatch(clearAuthSession());
+  }
+  return rawBaseQuery(args, api, extraOptions);
+};
+
 /**
  * Central RTK Query Base API for the Job Marketplace application.
- * All subsequent feature endpoints (jobs, employers, auth) inject into this base API.
+ * Configures credentialed requests (`credentials: 'include'`) for cross-origin localhost
+ * HttpOnly refresh cookies and attaches the in-memory Bearer access token when valid.
  */
 export const baseApi = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: getApiBaseUrl(),
-  }),
+  baseQuery: baseQueryWithAuthExpiry,
   tagTypes: ['ServiceStatus'],
   endpoints: (builder) => ({
     getServiceStatus: builder.query<ServiceMetadataResponse, void>({

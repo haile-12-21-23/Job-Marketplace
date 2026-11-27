@@ -4,7 +4,12 @@ import { AppError } from '../../../errors/app-error.js';
 import { RegisterUserUseCase } from './register-user.use-case.js';
 import { VerificationEmailIssuer } from './verification-email-issuer.js';
 import { CryptoVerificationTokenService } from '../domain/verification-token.js';
-import type { UserRepository, CreateUserInput, UserRecord } from '../ports/user.repository.js';
+import type {
+  UserRepository,
+  CreateUserInput,
+  UserRecord,
+  UserCredentialRecord,
+} from '../ports/user.repository.js';
 import type { PasswordHasher } from '../domain/password-hasher.js';
 import type { EmailSender, VerificationEmailPayload } from '../ports/email-sender.js';
 import type {
@@ -21,6 +26,19 @@ class InMemoryUserRepository implements UserRepository {
   async findByEmail(normalizedEmail: string): Promise<UserRecord | null> {
     const user = this.users.find((u) => u.email === normalizedEmail);
     return user ?? null;
+  }
+
+  async findCredentialsByEmail(normalizedEmail: string): Promise<UserCredentialRecord | null> {
+    const user = this.users.find((u) => u.email === normalizedEmail);
+    if (!user || !user.passwordHash) return null;
+    return {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      status: user.status,
+      emailVerifiedAt: user.emailVerifiedAt,
+    };
   }
 
   async create(data: CreateUserInput): Promise<UserRecord> {

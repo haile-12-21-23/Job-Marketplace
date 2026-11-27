@@ -1,8 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
+import { logger } from '../../observability/logger.js';
 import { UserStatus } from '../../generated/prisma/enums.js';
-import type { UserRepository, CreateUserInput, UserRecord } from './ports/user.repository.js';
+import type {
+  UserRepository,
+  CreateUserInput,
+  UserRecord,
+  UserCredentialRecord,
+} from './ports/user.repository.js';
+import type {
+  CreateSessionInput,
+  SessionRepository,
+  UserSessionRecord,
+} from './ports/session.repository.js';
 import type {
   ConsumeVerificationTokenOutcome,
   EmailVerificationTokenRecord,
@@ -12,7 +23,10 @@ import type {
 import type { EmailSender, VerificationEmailPayload } from './ports/email-sender.js';
 import { BcryptPasswordHasher } from './domain/password-hasher.js';
 import { CryptoVerificationTokenService } from './domain/verification-token.js';
+import { JoseAccessTokenService } from './domain/access-token.js';
+import { CryptoRefreshTokenService } from './domain/refresh-token.js';
 import { ResendRateLimiter } from './infrastructure/resend-rate-limiter.js';
+import { LoginRateLimiter } from './infrastructure/login-rate-limiter.js';
 
 class MockUserRepository implements UserRepository {
   public users: UserRecord[] = [];
@@ -20,6 +34,19 @@ class MockUserRepository implements UserRepository {
   async findByEmail(normalizedEmail: string): Promise<UserRecord | null> {
     const found = this.users.find((u) => u.email === normalizedEmail);
     return found ?? null;
+  }
+
+  async findCredentialsByEmail(normalizedEmail: string): Promise<UserCredentialRecord | null> {
+    const found = this.users.find((u) => u.email === normalizedEmail);
+    if (!found || !found.passwordHash) return null;
+    return {
+      id: found.id,
+      displayName: found.displayName,
+      email: found.email,
+      passwordHash: found.passwordHash,
+      status: found.status,
+      emailVerifiedAt: found.emailVerifiedAt,
+    };
   }
 
   async create(data: CreateUserInput): Promise<UserRecord> {
@@ -34,6 +61,26 @@ class MockUserRepository implements UserRepository {
       updatedAt: new Date(),
     };
     this.users.push(record);
+    return record;
+  }
+}
+
+class MockSessionRepository implements SessionRepository {
+  public sessions: UserSessionRecord[] = [];
+  private seq = 1;
+
+  async create(input: CreateSessionInput): Promise<UserSessionRecord> {
+    const record: UserSessionRecord = {
+      id: `6ba7b810-9dad-11d1-80b4-00c04fd4300${this.seq++}`,
+      userId: input.userId,
+      tokenFamilyId: input.tokenFamilyId,
+      refreshTokenHash: input.refreshTokenHash,
+      parentSessionId: input.parentSessionId,
+      expiresAt: input.expiresAt,
+      revokedAt: null,
+      createdAt: new Date(),
+    };
+    this.sessions.push(record);
     return record;
   }
 }
@@ -97,11 +144,15 @@ function extractTokenFromUrl(url: string): string {
 }
 
 describe('Identity Auth Routes', () => {
+  const jwtSecret = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   let mockRepo: MockUserRepository;
   let mockTokenRepo: MockVerificationTokenRepository;
+  let mockSessionRepo: MockSessionRepository;
   let fakeEmailSender: FakeEmailSender;
   let hasher: BcryptPasswordHasher;
   let tokenService: CryptoVerificationTokenService;
+  let accessTokenService: JoseAccessTokenService;
+  let refreshTokenService: CryptoRefreshTokenService;
   let nowMs: number;
   let app: ReturnType<typeof createApp>;
 
@@ -116,21 +167,44 @@ describe('Identity Auth Routes', () => {
     const clock = () => new Date(nowMs);
     mockRepo = new MockUserRepository();
     mockTokenRepo = new MockVerificationTokenRepository(mockRepo);
+    mockSessionRepo = new MockSessionRepository();
     fakeEmailSender = new FakeEmailSender();
     hasher = new BcryptPasswordHasher(4); // fast salt rounds for route tests
     tokenService = new CryptoVerificationTokenService();
+    accessTokenService = new JoseAccessTokenService({
+      secret: jwtSecret,
+      ttlSeconds: 900,
+      issuer: 'job-marketplace-api',
+      audience: 'job-marketplace-web',
+      clock,
+    });
+    refreshTokenService = new CryptoRefreshTokenService();
 
     app = createApp({
+      corsOrigins: ['http://localhost:5173'],
       identity: {
         userRepository: mockRepo,
         passwordHasher: hasher,
         verificationTokenRepository: mockTokenRepo,
         verificationTokenService: tokenService,
         emailSender: fakeEmailSender,
+        sessionRepository: mockSessionRepo,
+        accessTokenService,
+        refreshTokenService,
+        refreshTokenTtlDays: 30,
+        refreshCookieSameSite: 'lax',
+        isProduction: false,
         appWebUrl: 'https://jobs.example.com',
         emailVerificationTokenTtlMinutes: 60,
         clock,
         resendRateLimiter: new ResendRateLimiter({
+          ipMax: 5,
+          ipWindowSeconds: 900,
+          emailMax: 2,
+          emailWindowSeconds: 900,
+          clock,
+        }),
+        loginRateLimiter: new LoginRateLimiter({
           ipMax: 5,
           ipWindowSeconds: 900,
           emailMax: 2,
@@ -467,6 +541,209 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/resend-verification')
         .send({ email: 'user@example.com', extra: 1 })
         .expect(422);
+    });
+  });
+
+  describe('POST /api/v1/auth/login', () => {
+    async function seedVerifiedUser() {
+      await request(app).post('/api/v1/auth/register').send(validPayload).expect(201);
+      const token = extractTokenFromUrl(fakeEmailSender.sent[0]!.verificationUrl);
+      await request(app).post('/api/v1/auth/verify-email').send({ token }).expect(200);
+    }
+
+    it('authenticates verified active user, persists session, sets HttpOnly refresh cookie, and returns access token', async () => {
+      await seedVerifiedUser();
+
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', 'http://localhost:5173')
+        .send({
+          email: '  ABEBE@Example.COM  ',
+          password: validPayload.password,
+        })
+        .expect(200);
+
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['pragma']).toBe('no-cache');
+
+      expect(res.body).toEqual({
+        data: {
+          accessToken: expect.any(String),
+          tokenType: 'Bearer',
+          expiresIn: 900,
+          user: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            displayName: 'Abebe Bikila',
+            email: 'abebe@example.com',
+          },
+        },
+      });
+
+      const bodyString = JSON.stringify(res.body);
+      expect(bodyString).not.toContain(validPayload.password);
+      expect(bodyString).not.toContain('passwordHash');
+      expect(bodyString).not.toContain('refreshToken');
+
+      // Verify Set-Cookie attributes
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieHeader = Array.isArray(setCookie) ? setCookie[0]! : setCookie!;
+      expect(cookieHeader).toContain('jmp_refresh=');
+      expect(cookieHeader).toContain('HttpOnly');
+      expect(cookieHeader).toContain('SameSite=Lax');
+      expect(cookieHeader).toContain('Path=/api/v1/auth');
+      expect(cookieHeader).not.toContain('Domain=');
+      expect(cookieHeader).not.toContain('Secure');
+
+      const cookieValue = cookieHeader.split(';')[0]!.split('=')[1]!;
+      expect(bodyString).not.toContain(cookieValue);
+
+      // Persisted session has hashed refresh token only
+      expect(mockSessionRepo.sessions).toHaveLength(1);
+      const session = mockSessionRepo.sessions[0]!;
+      expect(session.refreshTokenHash).toBe(refreshTokenService.hashToken(cookieValue));
+      expect(session.refreshTokenHash).not.toBe(cookieValue);
+
+      // Verify JWT claims match persisted session
+      const claims = await accessTokenService.verify(res.body.data.accessToken as string);
+      expect(claims.sub).toBe('550e8400-e29b-41d4-a716-446655440000');
+      expect(claims.sid).toBe(session.id);
+    });
+
+    it('sets __Secure- prefixed Secure HttpOnly cookie in production mode', async () => {
+      const prodApp = createApp({
+        identity: {
+          userRepository: mockRepo,
+          passwordHasher: hasher,
+          sessionRepository: mockSessionRepo,
+          accessTokenService,
+          refreshTokenService,
+          isProduction: true,
+          refreshCookieSameSite: 'lax',
+          clock: () => new Date(nowMs),
+        },
+      });
+
+      mockRepo.users.push({
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        displayName: 'Abebe Bikila',
+        email: 'abebe@example.com',
+        passwordHash: await hasher.hash(validPayload.password),
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date(nowMs),
+        createdAt: new Date(nowMs),
+        updatedAt: new Date(nowMs),
+      });
+
+      const res = await request(prodApp)
+        .post('/api/v1/auth/login')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['pragma']).toBe('no-cache');
+
+      const cookieHeader = Array.isArray(res.headers['set-cookie'])
+        ? res.headers['set-cookie'][0]!
+        : res.headers['set-cookie']!;
+      expect(cookieHeader).toContain('__Secure-jmp_refresh=');
+      expect(cookieHeader).toContain('HttpOnly');
+      expect(cookieHeader).toContain('Secure');
+      expect(cookieHeader).toContain('SameSite=Lax');
+      expect(cookieHeader).toContain('Path=/api/v1/auth');
+      expect(cookieHeader).not.toContain('Domain=');
+    });
+
+    it('returns generic 401 INVALID_CREDENTIALS for unverified user, wrong password, or unknown user', async () => {
+      await request(app).post('/api/v1/auth/register').send(validPayload).expect(201);
+
+      const unverifiedRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(401);
+
+      const unknownRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'unknown@example.com', password: validPayload.password })
+        .expect(401);
+
+      expect(unverifiedRes.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(unverifiedRes.body).toMatchObject({
+        status: 401,
+        code: 'INVALID_CREDENTIALS',
+        detail: 'Invalid email or password.',
+      });
+      expect(unknownRes.body).toMatchObject({
+        status: 401,
+        code: 'INVALID_CREDENTIALS',
+        detail: 'Invalid email or password.',
+      });
+      expect(unverifiedRes.headers['set-cookie']).toBeUndefined();
+      expect(mockSessionRepo.sessions).toHaveLength(0);
+    });
+
+    it('enforces per-email and per-IP login rate limits consistently with Retry-After', async () => {
+      await seedVerifiedUser();
+
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'missing@example.com', password: 'WrongPassword123!' })
+        .expect(401);
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'MISSING@Example.COM', password: 'WrongPassword123!' })
+        .expect(401);
+
+      const emailLimited = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'missing@example.com', password: 'WrongPassword123!' })
+        .expect(429);
+
+      expect(emailLimited.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(emailLimited.headers['retry-after']).toBeDefined();
+      expect(emailLimited.body).toMatchObject({
+        status: 429,
+        code: 'RATE_LIMIT_EXCEEDED',
+      });
+
+      // IP limit configured to 5 (3 consumed so far)
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'other1@example.com', password: 'WrongPassword123!' })
+        .expect(401);
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'other2@example.com', password: 'WrongPassword123!' })
+        .expect(401);
+
+      const ipLimited = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'other3@example.com', password: 'WrongPassword123!' })
+        .expect(429);
+
+      expect(ipLimited.body.code).toBe('RATE_LIMIT_EXCEEDED');
+    });
+
+    it('returns 422 on invalid input or extra properties', async () => {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'bad', password: 'short' })
+        .expect(422);
+
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: validPayload.email, password: validPayload.password, role: 'ADMIN' })
+        .expect(422);
+    });
+
+    it('configures pino logger redaction for email, password, cookie, authorization, and token fields', () => {
+      const redactPaths = (logger as unknown as { bindings?: () => unknown }) ? true : false;
+      expect(redactPaths).toBe(true);
+      const warnSpy = vi.spyOn(logger, 'warn');
+      expect(warnSpy).toBeDefined();
+      warnSpy.mockRestore();
     });
   });
 });

@@ -22,3 +22,14 @@ export {
   type ResendVerificationResponseData,
   type ResendVerificationResponse,
 } from './email-verification.js';
+
+export {
+  loginRequestSchema,
+  loginUserSchema,
+  loginResponseDataSchema,
+  loginResponseEnvelopeSchema,
+  type LoginRequest,
+  type LoginUser,
+  type LoginResponseData,
+  type LoginResponse,
+} from './login.js';

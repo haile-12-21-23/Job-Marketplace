@@ -290,7 +290,9 @@ export default function RegisterPage(): React.JSX.Element {
         <div className="mt-6 border-t border-brand-line pt-4 text-center">
           <p className="text-xs text-brand-muted">
             Already have an account?{' '}
-            <span className="font-semibold text-brand-navy">Sign in available soon</span>
+            <Link to="/login" className="font-semibold text-brand-navy hover:underline">
+              Sign in
+            </Link>
           </p>
         </div>
       </div>

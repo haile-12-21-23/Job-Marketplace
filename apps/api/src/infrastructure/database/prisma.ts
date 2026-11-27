@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client.js';
-import { loadEnv } from '../../config/env.js';
+import { loadDatabaseConfig } from '../../config/env.js';
 import { logger } from '../../observability/logger.js';
 
 const { Pool } = pg;
@@ -17,7 +17,7 @@ let prismaClientInstance: PrismaClient | null = null;
  */
 export function getPrismaClient(databaseUrl?: string): PrismaClient {
   if (!prismaClientInstance) {
-    const url = databaseUrl ?? loadEnv().databaseUrl;
+    const url = databaseUrl ?? loadDatabaseConfig().databaseUrl;
     pool = new Pool({
       connectionString: url,
       max: 10,

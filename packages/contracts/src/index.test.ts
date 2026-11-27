@@ -24,6 +24,10 @@ import {
   resendVerificationRequestSchema,
   resendVerificationResponseDataSchema,
   resendVerificationResponseEnvelopeSchema,
+  loginRequestSchema,
+  loginUserSchema,
+  loginResponseDataSchema,
+  loginResponseEnvelopeSchema,
   type ApiVersion,
   type PublicId,
   type PaginationQueryInput,
@@ -43,6 +47,10 @@ import {
   type ResendVerificationRequest,
   type ResendVerificationResponseData,
   type ResendVerificationResponse,
+  type LoginRequest,
+  type LoginUser,
+  type LoginResponseData,
+  type LoginResponse,
 } from './index.js';
 
 describe('@jmp/contracts public barrel exports', () => {
@@ -93,6 +101,10 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(resendVerificationRequestSchema).toBeDefined();
     expect(resendVerificationResponseDataSchema).toBeDefined();
     expect(resendVerificationResponseEnvelopeSchema).toBeDefined();
+    expect(loginRequestSchema).toBeDefined();
+    expect(loginUserSchema).toBeDefined();
+    expect(loginResponseDataSchema).toBeDefined();
+    expect(loginResponseEnvelopeSchema).toBeDefined();
   });
 
   it('enforces type compatibility through inferred types', () => {
@@ -138,6 +150,22 @@ describe('@jmp/contracts public barrel exports', () => {
       message: 'Accepted',
     };
     const resendRes: ResendVerificationResponse = { data: resendResData };
+    const loginReq: LoginRequest = {
+      email: 'jane@example.com',
+      password: 'Password123!',
+    };
+    const loginUser: LoginUser = {
+      id: publicId,
+      displayName: 'Jane Doe',
+      email: 'jane@example.com',
+    };
+    const loginResData: LoginResponseData = {
+      accessToken: 'jwt-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: loginUser,
+    };
+    const loginRes: LoginResponse = { data: loginResData };
 
     expect(output.page).toBe(1);
     expect(paginationOutput.page).toBe(1);
@@ -152,5 +180,7 @@ describe('@jmp/contracts public barrel exports', () => {
     expect(verifyRes.data.verified).toBe(true);
     expect(resendReq.email).toBe('jane@example.com');
     expect(resendRes.data.accepted).toBe(true);
+    expect(loginReq.email).toBe('jane@example.com');
+    expect(loginRes.data.tokenType).toBe('Bearer');
   });
 });

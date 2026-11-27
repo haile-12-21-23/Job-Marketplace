@@ -67,13 +67,12 @@ export default function PublicLayout(): React.JSX.Element {
             >
               Register
             </Link>
-            <span
-              aria-disabled="true"
-              title="Authentication enabled in future sprint"
-              className="hidden cursor-default rounded-lg border border-brand-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy select-none sm:inline-block"
+            <Link
+              to="/login"
+              className="rounded-lg border border-brand-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-brand-soft transition"
             >
               Sign in
-            </span>
+            </Link>
             <Link
               to="/app"
               className="rounded-lg bg-brand-navy px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[#12263b] transition"

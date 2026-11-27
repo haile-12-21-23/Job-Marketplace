@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   jobSearchQuerySchema,
+  loginRequestSchema,
+  loginResponseDataSchema,
   registerRequestSchema,
   resendVerificationRequestSchema,
   verifyEmailRequestSchema,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type DataEnvelope,
+  type LoginRequest,
+  type LoginResponseData,
   type RegisterRequest,
   type ResendVerificationRequest,
   type VerifyEmailRequest,
@@ -94,5 +98,16 @@ describe('@jmp/web -> @jmp/contracts integration', () => {
     expect(resendVerificationRequestSchema.parse(resendForm)).toEqual({
       email: 'haile@example.com',
     });
+
+    const loginForm: LoginRequest = { email: 'haile@example.com', password: 'StrongPassword123!' };
+    expect(loginRequestSchema.parse(loginForm)).toEqual(loginForm);
+
+    const loginDto: LoginResponseData = {
+      accessToken: 'jwt-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: { id: sampleUuid, displayName: 'Haile', email: 'haile@example.com' },
+    };
+    expect(loginResponseDataSchema.parse(loginDto).tokenType).toBe('Bearer');
   });
 });

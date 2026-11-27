@@ -6,8 +6,10 @@ import AuthenticatedLayout from '../layouts/AuthenticatedLayout.js';
 import HomePage from '../pages/HomePage.js';
 import RegisterPage from '../pages/RegisterPage.js';
 import VerifyEmailPage from '../pages/VerifyEmailPage.js';
+import LoginPage from '../pages/LoginPage.js';
 import AppHomePage from '../pages/AppHomePage.js';
 import NotFoundPage from '../pages/NotFoundPage.js';
+import RequireAuthGuard from '../components/auth/RequireAuthGuard.js';
 
 export const routes: RouteObject[] = [
   {
@@ -27,6 +29,10 @@ export const routes: RouteObject[] = [
         element: <VerifyEmailPage />,
       },
       {
+        path: 'login',
+        element: <LoginPage />,
+      },
+      {
         path: '*',
         element: <NotFoundPage />,
       },
@@ -34,7 +40,11 @@ export const routes: RouteObject[] = [
   },
   {
     path: '/app',
-    element: <AuthenticatedLayout />,
+    element: (
+      <RequireAuthGuard>
+        <AuthenticatedLayout />
+      </RequireAuthGuard>
+    ),
     children: [
       {
         index: true,

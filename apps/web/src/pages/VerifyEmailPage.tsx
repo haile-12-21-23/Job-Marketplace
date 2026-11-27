@@ -224,10 +224,16 @@ export default function VerifyEmailPage(): React.JSX.Element {
           <p className="mt-3 text-sm leading-relaxed text-brand-muted">
             {verifyMessage ?? 'Your email address has been verified.'}
           </p>
-          <div className="mt-6">
+          <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              to="/login"
+              className="inline-flex items-center justify-center rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#12263b]"
+            >
+              Sign in
+            </Link>
             <Link
               to="/"
-              className="inline-flex items-center justify-center rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#12263b]"
+              className="inline-flex items-center justify-center rounded-lg border border-brand-line bg-white px-4 py-2 text-sm font-semibold text-brand-navy transition hover:bg-brand-soft"
             >
               Back to Home
             </Link>

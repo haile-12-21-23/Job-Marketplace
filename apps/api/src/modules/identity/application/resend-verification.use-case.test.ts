@@ -11,12 +11,20 @@ import type {
   EmailVerificationTokenRepository,
   IssueVerificationTokenInput,
 } from '../ports/email-verification-token.repository.js';
-import type { CreateUserInput, UserRecord, UserRepository } from '../ports/user.repository.js';
+import type {
+  CreateUserInput,
+  UserCredentialRecord,
+  UserRecord,
+  UserRepository,
+} from '../ports/user.repository.js';
 
 class InMemoryUserRepo implements UserRepository {
   public users: UserRecord[] = [];
   async findByEmail(normalizedEmail: string): Promise<UserRecord | null> {
     return this.users.find((u) => u.email === normalizedEmail) ?? null;
+  }
+  async findCredentialsByEmail(): Promise<UserCredentialRecord | null> {
+    return null;
   }
   async create(data: CreateUserInput): Promise<UserRecord> {
     const record: UserRecord = {

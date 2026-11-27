@@ -5,7 +5,12 @@ import { logger } from './observability/logger.js';
 import { connectDatabase, disconnectDatabase } from './infrastructure/database/prisma.js';
 import { loadEnv, EnvironmentValidationError } from './config/env.js';
 import type { ApiConfig } from './config/env.js';
-import { createEmailSender, ResendRateLimiter } from './modules/identity/index.js';
+import {
+  createEmailSender,
+  JoseAccessTokenService,
+  LoginRateLimiter,
+  ResendRateLimiter,
+} from './modules/identity/index.js';
 
 // ── Environment Validation (Startup Boundary) ────────────────────────────────
 let config: ApiConfig;
@@ -32,6 +37,7 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const app = createApp({
   corsOrigins: config.corsOrigins,
+  trustProxy: config.trustProxy,
   identity: {
     appWebUrl: config.appWebUrl,
     emailVerificationTokenTtlMinutes: config.emailVerificationTokenTtlMinutes,
@@ -42,6 +48,21 @@ const app = createApp({
       emailMax: config.emailVerificationResendEmailMax,
       emailWindowSeconds: config.emailVerificationResendEmailWindowSeconds,
     }),
+    accessTokenService: new JoseAccessTokenService({
+      secret: config.authAccessTokenSecret,
+      ttlSeconds: config.authAccessTokenTtlSeconds,
+      issuer: config.authAccessTokenIssuer,
+      audience: config.authAccessTokenAudience,
+    }),
+    loginRateLimiter: new LoginRateLimiter({
+      ipMax: config.authLoginRateLimitIpMax,
+      ipWindowSeconds: config.authLoginRateLimitIpWindowSeconds,
+      emailMax: config.authLoginRateLimitEmailMax,
+      emailWindowSeconds: config.authLoginRateLimitEmailWindowSeconds,
+    }),
+    refreshTokenTtlDays: config.authRefreshTokenTtlDays,
+    refreshCookieSameSite: config.authRefreshCookieSameSite,
+    isProduction: config.nodeEnv === 'production',
   },
 });
 const server = http.createServer(app);
