@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  confirmPasswordResetRequestSchema,
+  confirmPasswordResetResponseEnvelopeSchema,
   jobSearchQuerySchema,
   loginRequestSchema,
   loginResponseDataSchema,
@@ -8,8 +10,12 @@ import {
   refreshResponseEnvelopeSchema,
   registerRequestSchema,
   registerResponseDataSchema,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseEnvelopeSchema,
   resendVerificationRequestSchema,
   verifyEmailRequestSchema,
+  type ConfirmPasswordResetRequest,
+  type ConfirmPasswordResetResponse,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type LoginRequest,
@@ -18,6 +24,8 @@ import {
   type RefreshResponse,
   type RegisterRequest,
   type RegisterResponseData,
+  type RequestPasswordResetRequest,
+  type RequestPasswordResetResponse,
   type ResendVerificationRequest,
   type VerifyEmailRequest,
 } from '@jmp/contracts';
@@ -138,5 +146,22 @@ describe('@jmp/api -> @jmp/contracts integration', () => {
 
     const logoutRes: LogoutResponse = { data: { loggedOut: true } };
     expect(logoutResponseEnvelopeSchema.parse(logoutRes).data.loggedOut).toBe(true);
+
+    const resetReq: RequestPasswordResetRequest = { email: 'abebe@example.com' };
+    expect(requestPasswordResetRequestSchema.parse(resetReq).email).toBe('abebe@example.com');
+    const resetReqRes: RequestPasswordResetResponse = {
+      data: { accepted: true, message: 'Sent if matching' },
+    };
+    expect(requestPasswordResetResponseEnvelopeSchema.parse(resetReqRes).data.accepted).toBe(true);
+
+    const confirmReq: ConfirmPasswordResetRequest = {
+      token: 'reset-token',
+      newPassword: 'NewStrongPassword123!',
+    };
+    expect(confirmPasswordResetRequestSchema.parse(confirmReq).token).toBe('reset-token');
+    const confirmRes: ConfirmPasswordResetResponse = {
+      data: { reset: true, message: 'Reset ok' },
+    };
+    expect(confirmPasswordResetResponseEnvelopeSchema.parse(confirmRes).data.reset).toBe(true);
   });
 });

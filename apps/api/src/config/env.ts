@@ -306,6 +306,36 @@ export const apiEnvSchema = z
       1,
       86400,
     ),
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: positiveIntSchema(
+      'PASSWORD_RESET_TOKEN_TTL_MINUTES',
+      30,
+      5,
+      1440,
+    ),
+    PASSWORD_RESET_RATE_LIMIT_IP_MAX: positiveIntSchema(
+      'PASSWORD_RESET_RATE_LIMIT_IP_MAX',
+      10,
+      1,
+      1000,
+    ),
+    PASSWORD_RESET_RATE_LIMIT_IP_WINDOW_SECONDS: positiveIntSchema(
+      'PASSWORD_RESET_RATE_LIMIT_IP_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
+    PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX: positiveIntSchema(
+      'PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX',
+      3,
+      1,
+      100,
+    ),
+    PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS: positiveIntSchema(
+      'PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS',
+      900,
+      1,
+      86400,
+    ),
     TRUST_PROXY: trustProxySchema,
   })
   .superRefine((data, ctx) => {
@@ -394,6 +424,11 @@ export interface ApiConfig {
   authLoginRateLimitIpWindowSeconds: number;
   authLoginRateLimitEmailMax: number;
   authLoginRateLimitEmailWindowSeconds: number;
+  passwordResetTokenTtlMinutes: number;
+  passwordResetRateLimitIpMax: number;
+  passwordResetRateLimitIpWindowSeconds: number;
+  passwordResetRateLimitEmailMax: number;
+  passwordResetRateLimitEmailWindowSeconds: number;
   trustProxy: boolean;
 }
 
@@ -462,6 +497,12 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     authLoginRateLimitIpWindowSeconds: result.data.AUTH_LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS,
     authLoginRateLimitEmailMax: result.data.AUTH_LOGIN_RATE_LIMIT_EMAIL_MAX,
     authLoginRateLimitEmailWindowSeconds: result.data.AUTH_LOGIN_RATE_LIMIT_EMAIL_WINDOW_SECONDS,
+    passwordResetTokenTtlMinutes: result.data.PASSWORD_RESET_TOKEN_TTL_MINUTES,
+    passwordResetRateLimitIpMax: result.data.PASSWORD_RESET_RATE_LIMIT_IP_MAX,
+    passwordResetRateLimitIpWindowSeconds: result.data.PASSWORD_RESET_RATE_LIMIT_IP_WINDOW_SECONDS,
+    passwordResetRateLimitEmailMax: result.data.PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX,
+    passwordResetRateLimitEmailWindowSeconds:
+      result.data.PASSWORD_RESET_RATE_LIMIT_EMAIL_WINDOW_SECONDS,
     trustProxy: result.data.TRUST_PROXY,
   };
 }

@@ -9,6 +9,7 @@ import {
   createEmailSender,
   JoseAccessTokenService,
   LoginRateLimiter,
+  PasswordResetRateLimiter,
   ResendRateLimiter,
 } from './modules/identity/index.js';
 
@@ -60,6 +61,13 @@ const app = createApp({
       emailMax: config.authLoginRateLimitEmailMax,
       emailWindowSeconds: config.authLoginRateLimitEmailWindowSeconds,
     }),
+    passwordResetRateLimiter: new PasswordResetRateLimiter({
+      ipMax: config.passwordResetRateLimitIpMax,
+      ipWindowSeconds: config.passwordResetRateLimitIpWindowSeconds,
+      emailMax: config.passwordResetRateLimitEmailMax,
+      emailWindowSeconds: config.passwordResetRateLimitEmailWindowSeconds,
+    }),
+    passwordResetTokenTtlMinutes: config.passwordResetTokenTtlMinutes,
     refreshTokenTtlDays: config.authRefreshTokenTtlDays,
     refreshCookieSameSite: config.authRefreshCookieSameSite,
     isProduction: config.nodeEnv === 'production',

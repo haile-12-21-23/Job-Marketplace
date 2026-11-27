@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import {
+  confirmPasswordResetRequestSchema,
   loginRequestSchema,
   normalizeEmail,
   registerRequestSchema,
+  requestPasswordResetRequestSchema,
   resendVerificationRequestSchema,
   verifyEmailRequestSchema,
 } from '@jmp/contracts';
@@ -18,12 +20,16 @@ import { VerificationEmailIssuer } from './application/verification-email-issuer
 import { LoginUseCase } from './application/login.use-case.js';
 import { RefreshSessionUseCase } from './application/refresh-session.use-case.js';
 import { LogoutSessionUseCase } from './application/logout-session.use-case.js';
+import { RequestPasswordResetUseCase } from './application/request-password-reset.use-case.js';
+import { ConfirmPasswordResetUseCase } from './application/confirm-password-reset.use-case.js';
 import { PrismaUserRepository } from './infrastructure/prisma-user.repository.js';
 import { PrismaEmailVerificationTokenRepository } from './infrastructure/prisma-email-verification-token.repository.js';
+import { PrismaPasswordResetTokenRepository } from './infrastructure/prisma-password-reset-token.repository.js';
 import { PrismaSessionRepository } from './infrastructure/prisma-session.repository.js';
 import { DevelopmentEmailSender } from './infrastructure/email-sender.js';
 import { ResendRateLimiter } from './infrastructure/resend-rate-limiter.js';
 import { LoginRateLimiter } from './infrastructure/login-rate-limiter.js';
+import { PasswordResetRateLimiter } from './infrastructure/password-reset-rate-limiter.js';
 import type { RateLimitDecision } from './infrastructure/sliding-window-counter.js';
 import { BcryptPasswordHasher, type PasswordHasher } from './domain/password-hasher.js';
 import {
@@ -42,6 +48,7 @@ import type { UserRepository } from './ports/user.repository.js';
 import type { EmailVerificationTokenRepository } from './ports/email-verification-token.repository.js';
 import type { EmailSender } from './ports/email-sender.js';
 import type { SessionRepository } from './ports/session.repository.js';
+import type { PasswordResetTokenRepository } from './ports/password-reset-token.repository.js';
 
 export interface IdentityRouterOptions {
   userRepository?: UserRepository | undefined;
@@ -54,6 +61,9 @@ export interface IdentityRouterOptions {
   accessTokenService?: AccessTokenService | undefined;
   refreshTokenService?: RefreshTokenService | undefined;
   loginRateLimiter?: LoginRateLimiter | undefined;
+  passwordResetTokenRepository?: PasswordResetTokenRepository | undefined;
+  passwordResetRateLimiter?: PasswordResetRateLimiter | undefined;
+  passwordResetTokenTtlMinutes?: number | undefined;
   refreshTokenTtlDays?: number | undefined;
   refreshCookieSameSite?: RefreshCookieSameSite | undefined;
   isProduction?: boolean | undefined;
@@ -130,6 +140,11 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
   const accessTokenService = options?.accessTokenService ?? new UnconfiguredAccessTokenService();
   const refreshTokenService = options?.refreshTokenService ?? new CryptoRefreshTokenService();
   const loginRateLimiter = options?.loginRateLimiter ?? new LoginRateLimiter({ clock });
+  const passwordResetTokenRepository =
+    options?.passwordResetTokenRepository ?? new PrismaPasswordResetTokenRepository();
+  const passwordResetRateLimiter =
+    options?.passwordResetRateLimiter ?? new PasswordResetRateLimiter({ clock });
+  const passwordResetTokenTtlMinutes = options?.passwordResetTokenTtlMinutes ?? 30;
   const refreshTokenTtlDays = options?.refreshTokenTtlDays ?? 30;
   const refreshCookieSpec = buildRefreshCookieSpec({
     isProduction: options?.isProduction ?? false,
@@ -182,6 +197,21 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
     refreshTokenService,
     clock,
   });
+  const requestPasswordResetUseCase = new RequestPasswordResetUseCase({
+    userRepository,
+    tokenRepository: passwordResetTokenRepository,
+    tokenService: verificationTokenService,
+    emailSender,
+    appWebUrl,
+    tokenTtlMinutes: passwordResetTokenTtlMinutes,
+    clock,
+  });
+  const confirmPasswordResetUseCase = new ConfirmPasswordResetUseCase({
+    tokenRepository: passwordResetTokenRepository,
+    tokenService: verificationTokenService,
+    passwordHasher,
+    clock,
+  });
 
   const controller = new IdentityController(
     registerUserUseCase,
@@ -190,6 +220,8 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
     loginUseCase,
     refreshSessionUseCase,
     logoutSessionUseCase,
+    requestPasswordResetUseCase,
+    confirmPasswordResetUseCase,
     refreshCookieSpec,
   );
 
@@ -199,6 +231,7 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
 
   const resendRateLimitMessage = 'Too many verification email requests. Please try again later.';
   const loginRateLimitMessage = 'Too many login attempts. Please try again later.';
+  const passwordResetRateLimitMessage = 'Too many password reset requests. Please try again later.';
 
   router.post('/register', validateBody(registerRequestSchema), controller.register);
   router.post('/verify-email', validateBody(verifyEmailRequestSchema), controller.verifyEmail);
@@ -218,6 +251,18 @@ export function createIdentityRouter(options?: IdentityRouterOptions): Router {
   );
   router.post('/refresh', originGuard, controller.refresh);
   router.post('/logout', originGuard, controller.logout);
+  router.post(
+    '/password-reset/request',
+    createIpRateLimitMiddleware(passwordResetRateLimiter, passwordResetRateLimitMessage),
+    validateBody(requestPasswordResetRequestSchema),
+    createEmailRateLimitMiddleware(passwordResetRateLimiter, passwordResetRateLimitMessage),
+    controller.requestPasswordReset,
+  );
+  router.post(
+    '/password-reset/confirm',
+    validateBody(confirmPasswordResetRequestSchema),
+    controller.confirmPasswordReset,
+  );
 
   return router;
 }

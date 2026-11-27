@@ -67,18 +67,22 @@ export class LoginUseCase {
     const tokenFamilyId = randomUUID();
     const expiresAt = new Date(now.getTime() + this.refreshTokenTtlDays * MS_PER_DAY);
 
-    // Persist the session before issuing an access token or refresh cookie.
-    const session = await this.sessionRepository.create({
+    // Persist the session atomically while verifying credentials were not rotated by a concurrent password reset.
+    const sessionResult = await this.sessionRepository.createAuthenticatedSession({
       userId: user.id,
       tokenFamilyId,
       refreshTokenHash,
       parentSessionId: null,
       expiresAt,
+      expectedPasswordHash: user.passwordHash,
     });
+    if (sessionResult.outcome !== 'created') {
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password.');
+    }
 
     const { token: accessToken, expiresIn } = await this.accessTokenService.sign({
       userId: user.id,
-      sessionId: session.id,
+      sessionId: sessionResult.session.id,
       now,
     });
 

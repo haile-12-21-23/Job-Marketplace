@@ -10,6 +10,8 @@ import type {
   UserCredentialRecord,
 } from './ports/user.repository.js';
 import type {
+  CreateAuthenticatedSessionInput,
+  CreateAuthenticatedSessionResult,
   CreateSessionInput,
   ReplayCheckResult,
   RevokeFamilyResult,
@@ -25,13 +27,25 @@ import type {
   EmailVerificationTokenRepository,
   IssueVerificationTokenInput,
 } from './ports/email-verification-token.repository.js';
-import type { EmailSender, VerificationEmailPayload } from './ports/email-sender.js';
+import type {
+  ConsumePasswordResetTokenInput,
+  ConsumePasswordResetTokenOutcome,
+  IssuePasswordResetTokenInput,
+  PasswordResetTokenRecord,
+  PasswordResetTokenRepository,
+} from './ports/password-reset-token.repository.js';
+import type {
+  EmailSender,
+  PasswordResetEmailPayload,
+  VerificationEmailPayload,
+} from './ports/email-sender.js';
 import { BcryptPasswordHasher } from './domain/password-hasher.js';
 import { CryptoVerificationTokenService } from './domain/verification-token.js';
 import { JoseAccessTokenService } from './domain/access-token.js';
 import { CryptoRefreshTokenService } from './domain/refresh-token.js';
 import { ResendRateLimiter } from './infrastructure/resend-rate-limiter.js';
 import { LoginRateLimiter } from './infrastructure/login-rate-limiter.js';
+import { PasswordResetRateLimiter } from './infrastructure/password-reset-rate-limiter.js';
 
 class MockUserRepository implements UserRepository {
   public users: UserRecord[] = [];
@@ -89,6 +103,22 @@ class MockSessionRepository implements SessionRepository {
     };
     this.sessions.push(record);
     return record;
+  }
+
+  async createAuthenticatedSession(
+    input: CreateAuthenticatedSessionInput,
+  ): Promise<CreateAuthenticatedSessionResult> {
+    const user = this.userRepo.users.find((u) => u.id === input.userId);
+    if (
+      !user ||
+      user.passwordHash !== input.expectedPasswordHash ||
+      user.status !== UserStatus.ACTIVE ||
+      user.emailVerifiedAt === null
+    ) {
+      return { outcome: 'stale_credentials' };
+    }
+    const session = await this.create(input);
+    return { outcome: 'created', session };
   }
 
   async findRotationCandidateByTokenHash(
@@ -235,8 +265,58 @@ class MockVerificationTokenRepository implements EmailVerificationTokenRepositor
   }
 }
 
+class MockPasswordResetTokenRepository implements PasswordResetTokenRepository {
+  public tokens: PasswordResetTokenRecord[] = [];
+  private seq = 1;
+
+  constructor(
+    private readonly userRepo: MockUserRepository,
+    private readonly sessionRepo: MockSessionRepository,
+  ) {}
+
+  async issueToken(input: IssuePasswordResetTokenInput): Promise<PasswordResetTokenRecord> {
+    for (const token of this.tokens) {
+      if (token.userId === input.userId && token.usedAt === null) {
+        token.usedAt = input.now;
+      }
+    }
+    const created: PasswordResetTokenRecord = {
+      id: `prt-${this.seq++}`,
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+      createdAt: input.now,
+    };
+    this.tokens.push(created);
+    return created;
+  }
+
+  async consumeAndResetPassword(
+    input: ConsumePasswordResetTokenInput,
+  ): Promise<ConsumePasswordResetTokenOutcome> {
+    const token = this.tokens.find((t) => t.tokenHash === input.tokenHash);
+    if (!token || token.usedAt !== null || token.expiresAt.getTime() <= input.now.getTime()) {
+      return 'invalid_or_expired';
+    }
+    const user = this.userRepo.users.find((u) => u.id === token.userId);
+    if (!user || user.status !== UserStatus.ACTIVE || user.emailVerifiedAt === null) {
+      return 'invalid_or_expired';
+    }
+    token.usedAt = input.now;
+    user.passwordHash = input.newPasswordHash;
+    for (const s of this.sessionRepo.sessions) {
+      if (s.userId === user.id && s.revokedAt === null) {
+        s.revokedAt = input.now;
+      }
+    }
+    return 'reset';
+  }
+}
+
 class FakeEmailSender implements EmailSender {
   public sent: VerificationEmailPayload[] = [];
+  public sentReset: PasswordResetEmailPayload[] = [];
   public shouldFail = false;
 
   async sendVerificationEmail(payload: VerificationEmailPayload): Promise<void> {
@@ -244,6 +324,13 @@ class FakeEmailSender implements EmailSender {
       throw new Error('Provider outage');
     }
     this.sent.push(payload);
+  }
+
+  async sendPasswordResetEmail(payload: PasswordResetEmailPayload): Promise<void> {
+    if (this.shouldFail) {
+      throw new Error(`Provider outage for ${payload.resetUrl}`);
+    }
+    this.sentReset.push(payload);
   }
 }
 
@@ -260,6 +347,7 @@ describe('Identity Auth Routes', () => {
   const jwtSecret = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   let mockRepo: MockUserRepository;
   let mockTokenRepo: MockVerificationTokenRepository;
+  let mockResetTokenRepo: MockPasswordResetTokenRepository;
   let mockSessionRepo: MockSessionRepository;
   let fakeEmailSender: FakeEmailSender;
   let hasher: BcryptPasswordHasher;
@@ -281,6 +369,7 @@ describe('Identity Auth Routes', () => {
     mockRepo = new MockUserRepository();
     mockTokenRepo = new MockVerificationTokenRepository(mockRepo);
     mockSessionRepo = new MockSessionRepository(mockRepo);
+    mockResetTokenRepo = new MockPasswordResetTokenRepository(mockRepo, mockSessionRepo);
     fakeEmailSender = new FakeEmailSender();
     hasher = new BcryptPasswordHasher(4); // fast salt rounds for route tests
     tokenService = new CryptoVerificationTokenService();
@@ -300,6 +389,8 @@ describe('Identity Auth Routes', () => {
         passwordHasher: hasher,
         verificationTokenRepository: mockTokenRepo,
         verificationTokenService: tokenService,
+        passwordResetTokenRepository: mockResetTokenRepo,
+        passwordResetTokenTtlMinutes: 30,
         emailSender: fakeEmailSender,
         sessionRepository: mockSessionRepo,
         accessTokenService,
@@ -318,6 +409,13 @@ describe('Identity Auth Routes', () => {
           clock,
         }),
         loginRateLimiter: new LoginRateLimiter({
+          ipMax: 5,
+          ipWindowSeconds: 900,
+          emailMax: 2,
+          emailWindowSeconds: 900,
+          clock,
+        }),
+        passwordResetRateLimiter: new PasswordResetRateLimiter({
           ipMax: 5,
           ipWindowSeconds: 900,
           emailMax: 2,
@@ -1152,6 +1250,259 @@ describe('Identity Auth Routes', () => {
       expect(clearedCookie).toContain('Secure');
       expect(clearedCookie).toContain('SameSite=Strict');
       expect(clearedCookie).toContain('Path=/api/v1/auth');
+    });
+  });
+
+  describe('POST /api/v1/auth/password-reset/request and POST /api/v1/auth/password-reset/confirm', () => {
+    async function seedVerifiedUserAndSessions() {
+      await request(app).post('/api/v1/auth/register').send(validPayload).expect(201);
+      const verifyToken = extractTokenFromUrl(fakeEmailSender.sent[0]!.verificationUrl);
+      await request(app).post('/api/v1/auth/verify-email').send({ token: verifyToken }).expect(200);
+
+      // Establish two separate sessions/families (two devices)
+      const login1 = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', 'http://localhost:5173')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+      const login2 = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', 'http://localhost:5173')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(200);
+
+      return {
+        cookie1: getFirstSetCookie(login1.headers).split(';')[0]!,
+        cookie2: getFirstSetCookie(login2.headers).split(';')[0]!,
+      };
+    }
+
+    it('returns identical 202 anti-enumeration response for unknown, unverified, inactive, and active users without leaking tokens', async () => {
+      mockRepo.users.push({
+        id: 'u-unverified',
+        displayName: 'Unverified',
+        email: 'unverified@example.com',
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: null,
+        createdAt: new Date(nowMs),
+        updatedAt: new Date(nowMs),
+      });
+      mockRepo.users.push({
+        id: 'u-suspended',
+        displayName: 'Suspended',
+        email: 'suspended@example.com',
+        status: UserStatus.SUSPENDED,
+        emailVerifiedAt: new Date(nowMs),
+        createdAt: new Date(nowMs),
+        updatedAt: new Date(nowMs),
+      });
+
+      const unknownRes = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'missing@example.com' })
+        .expect(202);
+      const unverifiedRes = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'unverified@example.com' })
+        .expect(202);
+      const suspendedRes = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'suspended@example.com' })
+        .expect(202);
+
+      expect(fakeEmailSender.sentReset).toHaveLength(0);
+      expect(mockResetTokenRepo.tokens).toHaveLength(0);
+
+      await seedVerifiedUserAndSessions();
+
+      const activeRes = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: '  ABEBE@Example.COM  ' })
+        .expect(202);
+
+      const expectedBody = {
+        data: {
+          accepted: true,
+          message:
+            'If an account matches that email address, password reset instructions will be sent.',
+        },
+      };
+      expect(unknownRes.body).toEqual(expectedBody);
+      expect(unverifiedRes.body).toEqual(expectedBody);
+      expect(suspendedRes.body).toEqual(expectedBody);
+      expect(activeRes.body).toEqual(expectedBody);
+
+      for (const r of [unknownRes, unverifiedRes, suspendedRes, activeRes]) {
+        expect(r.headers['cache-control']).toBe('no-store');
+        expect(r.headers['pragma']).toBe('no-cache');
+      }
+
+      expect(fakeEmailSender.sentReset).toHaveLength(1);
+      expect(mockResetTokenRepo.tokens).toHaveLength(1);
+      const rawToken = extractTokenFromUrl(fakeEmailSender.sentReset[0]!.resetUrl);
+      expect(rawToken.length).toBeGreaterThanOrEqual(40);
+      expect(mockResetTokenRepo.tokens[0]!.tokenHash).toBe(tokenService.hashToken(rawToken));
+      expect(JSON.stringify(activeRes.body)).not.toContain(rawToken);
+    });
+
+    it('returns identical 202 even when email provider fails and enforces independent IP/email rate limits', async () => {
+      await seedVerifiedUserAndSessions();
+      fakeEmailSender.shouldFail = true;
+
+      const failDeliveryRes = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(202);
+
+      expect(failDeliveryRes.body.data.accepted).toBe(true);
+
+      // Email rate limit is 2 in test setup
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'ABEBE@example.com' })
+        .expect(202);
+
+      const emailLimited = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(429);
+
+      expect(emailLimited.headers['retry-after']).toBeDefined();
+      expect(emailLimited.body).toMatchObject({
+        status: 429,
+        code: 'RATE_LIMIT_EXCEEDED',
+      });
+
+      // IP rate limit is 5 (3 used so far)
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'other1@example.com' })
+        .expect(202);
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'other2@example.com' })
+        .expect(202);
+
+      const ipLimited = await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'other3@example.com' })
+        .expect(429);
+
+      expect(ipLimited.headers['retry-after']).toBeDefined();
+      expect(ipLimited.body.code).toBe('RATE_LIMIT_EXCEEDED');
+    });
+
+    it('confirms reset, updates password hash, revokes all active sessions across families, and rejects token reuse', async () => {
+      const { cookie1, cookie2 } = await seedVerifiedUserAndSessions();
+      // Advance beyond login rate-limit window before post-reset login verification
+      nowMs += 901_000;
+
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(202);
+
+      const firstToken = extractTokenFromUrl(fakeEmailSender.sentReset[0]!.resetUrl);
+
+      // Issuing a newer token supersedes the first token
+      nowMs += 1000;
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(202);
+      const secondToken = extractTokenFromUrl(fakeEmailSender.sentReset[1]!.resetUrl);
+      expect(secondToken).not.toBe(firstToken);
+
+      const supersededRes = await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: firstToken, newPassword: 'BrandNewPassword123!' })
+        .expect(400);
+      expect(supersededRes.headers['cache-control']).toBe('no-store');
+      expect(supersededRes.headers['pragma']).toBe('no-cache');
+      expect(supersededRes.body).toMatchObject({
+        status: 400,
+        code: 'INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN',
+      });
+
+      const newPassword = 'BrandNewPassword123!';
+      const confirmRes = await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: secondToken, newPassword })
+        .expect(200);
+
+      expect(confirmRes.headers['cache-control']).toBe('no-store');
+      expect(confirmRes.headers['pragma']).toBe('no-cache');
+      expect(confirmRes.headers['set-cookie']).toBeUndefined();
+      expect(confirmRes.body).toEqual({
+        data: {
+          reset: true,
+          message: 'Your password has been reset. You can now sign in with your new password.',
+        },
+      });
+      const confirmBodyString = JSON.stringify(confirmRes.body);
+      expect(confirmBodyString).not.toContain(newPassword);
+      expect(confirmBodyString).not.toContain(secondToken);
+
+      // Reusing consumed token fails with generic 400
+      const reuseRes = await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: secondToken, newPassword: 'AnotherPassword123!' })
+        .expect(400);
+      expect(reuseRes.body.code).toBe('INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN');
+
+      // Both pre-existing device sessions are revoked and cannot refresh
+      await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', cookie1)
+        .expect(401);
+      await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Origin', 'http://localhost:5173')
+        .set('Cookie', cookie2)
+        .expect(401);
+
+      // Old password fails; new password succeeds
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: validPayload.email, password: validPayload.password })
+        .expect(401);
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: validPayload.email, password: newPassword })
+        .expect(200);
+    });
+
+    it('rejects expired reset token and invalid confirmation payloads (422)', async () => {
+      await seedVerifiedUserAndSessions();
+
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: validPayload.email })
+        .expect(202);
+      const rawToken = extractTokenFromUrl(fakeEmailSender.sentReset[0]!.resetUrl);
+
+      // Advance clock past 30-minute TTL
+      nowMs += 31 * 60_000;
+      const expiredRes = await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: rawToken, newPassword: 'ValidNewPassword123!' })
+        .expect(400);
+      expect(expiredRes.body.code).toBe('INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN');
+
+      // Weak password / extra fields -> 422
+      await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: rawToken, newPassword: 'short' })
+        .expect(422);
+      await request(app)
+        .post('/api/v1/auth/password-reset/confirm')
+        .send({ token: rawToken, newPassword: 'ValidNewPassword123!', extra: true })
+        .expect(422);
+      await request(app)
+        .post('/api/v1/auth/password-reset/request')
+        .send({ email: 'bad-email' })
+        .expect(422);
     });
   });
 });

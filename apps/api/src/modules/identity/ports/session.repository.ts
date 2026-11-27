@@ -19,6 +19,13 @@ export interface CreateSessionInput {
   expiresAt: Date;
 }
 
+export interface CreateAuthenticatedSessionInput extends CreateSessionInput {
+  expectedPasswordHash: string;
+}
+
+export type CreateAuthenticatedSessionResult =
+  { outcome: 'created'; session: UserSessionRecord } | { outcome: 'stale_credentials' };
+
 export interface SessionUserEligibility {
   id: string;
   displayName: string;
@@ -67,6 +74,9 @@ export interface RevokeFamilyResult {
 
 export interface SessionRepository {
   create(input: CreateSessionInput): Promise<UserSessionRecord>;
+  createAuthenticatedSession(
+    input: CreateAuthenticatedSessionInput,
+  ): Promise<CreateAuthenticatedSessionResult>;
   findRotationCandidateByTokenHash(
     refreshTokenHash: string,
   ): Promise<SessionRotationCandidate | null>;

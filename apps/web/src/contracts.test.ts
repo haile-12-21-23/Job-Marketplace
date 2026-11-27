@@ -1,13 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
+  confirmPasswordResetRequestSchema,
+  confirmPasswordResetResponseEnvelopeSchema,
   jobSearchQuerySchema,
   loginRequestSchema,
   loginResponseDataSchema,
   logoutResponseEnvelopeSchema,
   refreshResponseEnvelopeSchema,
   registerRequestSchema,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseEnvelopeSchema,
   resendVerificationRequestSchema,
   verifyEmailRequestSchema,
+  type ConfirmPasswordResetRequest,
+  type ConfirmPasswordResetResponse,
   type JobSearchQueryInput,
   type JobSearchQueryOutput,
   type DataEnvelope,
@@ -16,6 +22,8 @@ import {
   type LogoutResponse,
   type RefreshResponse,
   type RegisterRequest,
+  type RequestPasswordResetRequest,
+  type RequestPasswordResetResponse,
   type ResendVerificationRequest,
   type VerifyEmailRequest,
 } from '@jmp/contracts';
@@ -119,5 +127,22 @@ describe('@jmp/web -> @jmp/contracts integration', () => {
 
     const logoutRes: LogoutResponse = { data: { loggedOut: true } };
     expect(logoutResponseEnvelopeSchema.parse(logoutRes).data.loggedOut).toBe(true);
+
+    const forgotReq: RequestPasswordResetRequest = { email: 'haile@example.com' };
+    expect(requestPasswordResetRequestSchema.parse(forgotReq)).toEqual(forgotReq);
+    const forgotRes: RequestPasswordResetResponse = {
+      data: { accepted: true, message: 'Sent' },
+    };
+    expect(requestPasswordResetResponseEnvelopeSchema.parse(forgotRes).data.accepted).toBe(true);
+
+    const resetReq: ConfirmPasswordResetRequest = {
+      token: 'reset-tok',
+      newPassword: 'StrongPassword123!',
+    };
+    expect(confirmPasswordResetRequestSchema.parse(resetReq)).toEqual(resetReq);
+    const resetRes: ConfirmPasswordResetResponse = {
+      data: { reset: true, message: 'Reset ok' },
+    };
+    expect(confirmPasswordResetResponseEnvelopeSchema.parse(resetRes).data.reset).toBe(true);
   });
 });

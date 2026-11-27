@@ -3,6 +3,8 @@ import { Prisma, PrismaClient } from '../../../generated/prisma/client.js';
 import { UserStatus } from '../../../generated/prisma/enums.js';
 import { prisma as lazyPrisma } from '../../../infrastructure/database/prisma.js';
 import type {
+  CreateAuthenticatedSessionInput,
+  CreateAuthenticatedSessionResult,
   CreateSessionInput,
   ReplayCheckResult,
   RevokeFamilyResult,
@@ -26,34 +28,65 @@ interface FamilyLookupRow {
   token_family_id: string;
 }
 
+interface SessionOwnerRow {
+  user_id: string;
+}
+
+interface LockedUserCredentialRow {
+  id: string;
+  password_hash: string;
+  status: UserStatus;
+  email_verified_at: Date | null;
+}
+
 function deriveFamilyLockKeys(tokenFamilyId: string): [number, number] {
   const digest = createHash('sha256').update(tokenFamilyId, 'utf8').digest();
   return [digest.readInt32BE(0), digest.readInt32BE(4)];
 }
 
 /**
- * Acquires a common transaction-scoped PostgreSQL advisory lock for the session's
- * token family before locking or mutating any rows in `user_sessions`.
- * Serializes ancestor replay, descendant rotation, and logout across the entire family.
+ * Lock hierarchy across identity transactions (prevents deadlocks):
+ *   1. Transaction-scoped family advisory lock (pg_advisory_xact_lock)
+ *   2. Owning user row lock (users FOR SHARE in session ops, FOR UPDATE in password reset)
+ *   3. Session / reset-token row locks and mutations
  */
-async function acquireFamilyLockByTokenHash(
+async function acquireFamilyLockAndUserShareLock(
   tx: Prisma.TransactionClient,
   refreshTokenHash: string,
-): Promise<string | null> {
-  const rows = await tx.$queryRaw<FamilyLookupRow[]>`
+): Promise<{ tokenFamilyId: string; userId: string } | null> {
+  const familyRows = await tx.$queryRaw<FamilyLookupRow[]>`
     SELECT token_family_id
     FROM user_sessions
     WHERE refresh_token_hash = ${refreshTokenHash}
   `;
 
-  const row = rows[0];
-  if (!row) {
+  const familyRow = familyRows[0];
+  if (!familyRow) {
     return null;
   }
 
-  const [keyHigh, keyLow] = deriveFamilyLockKeys(row.token_family_id);
+  const [keyHigh, keyLow] = deriveFamilyLockKeys(familyRow.token_family_id);
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${keyHigh}::int4, ${keyLow}::int4)`;
-  return row.token_family_id;
+
+  // Resolve userId after obtaining the family advisory lock, then acquire users FOR SHARE
+  // before taking any session row locks so password-reset FOR UPDATE serializes cleanly.
+  const ownerRows = await tx.$queryRaw<SessionOwnerRow[]>`
+    SELECT user_id
+    FROM user_sessions
+    WHERE refresh_token_hash = ${refreshTokenHash}
+  `;
+
+  const ownerRow = ownerRows[0];
+  if (!ownerRow) {
+    return null;
+  }
+
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${ownerRow.user_id}::uuid FOR SHARE`;
+
+  return {
+    tokenFamilyId: familyRow.token_family_id,
+    userId: ownerRow.user_id,
+  };
 }
 
 async function revokeActiveFamilyRows(
@@ -117,6 +150,47 @@ export class PrismaSessionRepository implements SessionRepository {
     return mapSessionRecord(session);
   }
 
+  async createAuthenticatedSession(
+    input: CreateAuthenticatedSessionInput,
+  ): Promise<CreateAuthenticatedSessionResult> {
+    return this.client.$transaction(async (tx) => {
+      // Lock the owning user row (FOR SHARE) to serialize against password reset (FOR UPDATE)
+      // and ensure a concurrent password change rejects stale pre-reset credential checks.
+      const userRows = await tx.$queryRaw<LockedUserCredentialRow[]>`
+        SELECT id, password_hash, status, email_verified_at
+        FROM users
+        WHERE id = ${input.userId}::uuid
+        FOR SHARE
+      `;
+
+      const userRow = userRows[0];
+      if (
+        !userRow ||
+        userRow.password_hash !== input.expectedPasswordHash ||
+        userRow.status !== UserStatus.ACTIVE ||
+        userRow.email_verified_at === null
+      ) {
+        return { outcome: 'stale_credentials' };
+      }
+
+      const session = await tx.userSession.create({
+        data: {
+          userId: input.userId,
+          tokenFamilyId: input.tokenFamilyId,
+          refreshTokenHash: input.refreshTokenHash,
+          parentSessionId: input.parentSessionId,
+          expiresAt: input.expiresAt,
+          revokedAt: null,
+        },
+      });
+
+      return {
+        outcome: 'created',
+        session: mapSessionRecord(session),
+      };
+    });
+  }
+
   async findRotationCandidateByTokenHash(
     refreshTokenHash: string,
   ): Promise<SessionRotationCandidate | null> {
@@ -147,8 +221,8 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
     return this.client.$transaction(async (tx) => {
-      const familyId = await acquireFamilyLockByTokenHash(tx, input.presentedTokenHash);
-      if (!familyId) {
+      const locks = await acquireFamilyLockAndUserShareLock(tx, input.presentedTokenHash);
+      if (!locks) {
         return { outcome: 'not_found' };
       }
 
@@ -233,8 +307,8 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async revokeFamilyIfReplayed(refreshTokenHash: string, now: Date): Promise<ReplayCheckResult> {
     return this.client.$transaction(async (tx) => {
-      const familyId = await acquireFamilyLockByTokenHash(tx, refreshTokenHash);
-      if (!familyId) {
+      const locks = await acquireFamilyLockAndUserShareLock(tx, refreshTokenHash);
+      if (!locks) {
         return { outcome: 'not_found' };
       }
 
@@ -270,16 +344,16 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async revokeFamilyByTokenHash(refreshTokenHash: string, now: Date): Promise<RevokeFamilyResult> {
     return this.client.$transaction(async (tx) => {
-      const familyId = await acquireFamilyLockByTokenHash(tx, refreshTokenHash);
-      if (!familyId) {
+      const locks = await acquireFamilyLockAndUserShareLock(tx, refreshTokenHash);
+      if (!locks) {
         return { revokedCount: 0, tokenFamilyId: null };
       }
 
-      const revokedCount = await revokeActiveFamilyRows(tx, familyId, now);
+      const revokedCount = await revokeActiveFamilyRows(tx, locks.tokenFamilyId, now);
 
       return {
         revokedCount,
-        tokenFamilyId: familyId,
+        tokenFamilyId: locks.tokenFamilyId,
       };
     });
   }

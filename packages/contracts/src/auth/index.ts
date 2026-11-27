@@ -44,3 +44,18 @@ export {
   type LogoutResponseData,
   type LogoutResponse,
 } from './session.js';
+
+export {
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseDataSchema,
+  requestPasswordResetResponseEnvelopeSchema,
+  confirmPasswordResetRequestSchema,
+  confirmPasswordResetResponseDataSchema,
+  confirmPasswordResetResponseEnvelopeSchema,
+  type RequestPasswordResetRequest,
+  type RequestPasswordResetResponseData,
+  type RequestPasswordResetResponse,
+  type ConfirmPasswordResetRequest,
+  type ConfirmPasswordResetResponseData,
+  type ConfirmPasswordResetResponse,
+} from './password-reset.js';

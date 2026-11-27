@@ -33,6 +33,8 @@ export function createV1Router(options?: V1RouterOptions): Router {
    * POST /api/v1/auth/login
    * POST /api/v1/auth/refresh
    * POST /api/v1/auth/logout
+   * POST /api/v1/auth/password-reset/request
+   * POST /api/v1/auth/password-reset/confirm
    * Mount auth domain routes under /auth.
    */
   const identityOptions: IdentityRouterOptions | undefined =

@@ -409,4 +409,19 @@ describe('React Router configuration and routes', () => {
       authNoticeKind: null,
     });
   });
+
+  it('renders the forgot-password and reset-password public routes', async () => {
+    renderWithRouter('/forgot-password');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Reset your password' }),
+    ).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Send Reset Instructions' })).toBeDefined();
+
+    renderWithRouter('/reset-password?token=route-reset-token');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Choose a new password' }),
+    ).toBeDefined();
+    expect(screen.getByLabelText('New Password')).toBeDefined();
+    expect(screen.getByLabelText('Confirm New Password')).toBeDefined();
+  });
 });

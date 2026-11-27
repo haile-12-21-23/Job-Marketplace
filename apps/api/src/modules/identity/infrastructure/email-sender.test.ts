@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  buildPasswordResetEmailContent,
   buildVerificationEmailContent,
   createEmailSender,
   DevelopmentEmailSender,
@@ -84,5 +85,67 @@ describe('EmailSender adapters', () => {
         emailHttpApiKey: 'key',
       }),
     ).toBeInstanceOf(HttpEmailSender);
+  });
+
+  it('formats password reset email with escaped display name, reset link, single-use notice, and expiry', () => {
+    const content = buildPasswordResetEmailContent({
+      to: 'user@example.com',
+      displayName: 'Abebe <Admin>',
+      resetUrl: 'https://app.example.com/reset-password?token=raw-reset-token',
+      expiresInMinutes: 30,
+    });
+
+    expect(content.subject).toBe('Reset your Job Marketplace password');
+    expect(content.text).toContain('https://app.example.com/reset-password?token=raw-reset-token');
+    expect(content.text).toContain('30 minutes');
+    expect(content.text).toContain('can only be used once');
+    expect(content.text).toContain('safely ignore this message');
+    expect(content.html).toContain('Abebe &lt;Admin&gt;');
+    expect(content.html).toContain('https://app.example.com/reset-password?token=raw-reset-token');
+  });
+
+  it('DevelopmentEmailSender logs no raw reset token, reset URL, or email address', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const sender = new DevelopmentEmailSender();
+    const rawToken = 'very-secret-reset-token';
+    const resetUrl = `https://app.example.com/reset-password?token=${rawToken}`;
+
+    await sender.sendPasswordResetEmail({
+      to: 'user@example.com',
+      displayName: 'Test User',
+      resetUrl,
+      expiresInMinutes: 30,
+    });
+
+    const logged = JSON.stringify([...debugSpy.mock.calls, ...infoSpy.mock.calls]);
+    expect(logged).not.toContain(rawToken);
+    expect(logged).not.toContain(resetUrl);
+    expect(logged).not.toContain('user@example.com');
+
+    debugSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  it('HttpEmailSender delivers password reset email and throws safe error on non-2xx', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('Sensitive upstream body', { status: 502 }),
+    ) as unknown as typeof fetch;
+
+    const sender = new HttpEmailSender({
+      endpoint: 'https://mail.example.com/send',
+      apiKey: 'secret-api-key',
+      from: 'no-reply@example.com',
+      fetchImpl: fetchMock,
+    });
+
+    await expect(
+      sender.sendPasswordResetEmail({
+        to: 'user@example.com',
+        displayName: 'Test User',
+        resetUrl: 'https://app.example.com/reset-password?token=raw-reset',
+        expiresInMinutes: 30,
+      }),
+    ).rejects.toThrowError('Email provider rejected request with HTTP 502');
   });
 });

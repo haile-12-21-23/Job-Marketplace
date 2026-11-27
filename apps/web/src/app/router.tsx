@@ -7,6 +7,8 @@ import HomePage from '../pages/HomePage.js';
 import RegisterPage from '../pages/RegisterPage.js';
 import VerifyEmailPage from '../pages/VerifyEmailPage.js';
 import LoginPage from '../pages/LoginPage.js';
+import ForgotPasswordPage from '../pages/ForgotPasswordPage.js';
+import ResetPasswordPage from '../pages/ResetPasswordPage.js';
 import AppHomePage from '../pages/AppHomePage.js';
 import NotFoundPage from '../pages/NotFoundPage.js';
 import RequireAuthGuard from '../components/auth/RequireAuthGuard.js';
@@ -31,6 +33,14 @@ export const routes: RouteObject[] = [
       {
         path: 'login',
         element: <LoginPage />,
+      },
+      {
+        path: 'forgot-password',
+        element: <ForgotPasswordPage />,
+      },
+      {
+        path: 'reset-password',
+        element: <ResetPasswordPage />,
       },
       {
         path: '*',
