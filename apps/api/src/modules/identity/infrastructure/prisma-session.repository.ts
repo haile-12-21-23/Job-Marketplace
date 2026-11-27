@@ -1,4 +1,5 @@
-import { PrismaClient } from '../../../generated/prisma/client.js';
+import { createHash } from 'node:crypto';
+import { Prisma, PrismaClient } from '../../../generated/prisma/client.js';
 import { UserStatus } from '../../../generated/prisma/enums.js';
 import { prisma as lazyPrisma } from '../../../infrastructure/database/prisma.js';
 import type {
@@ -21,8 +22,55 @@ interface LockedSessionRow {
   revoked_at: Date | null;
 }
 
-interface LockedFamilyRow {
+interface FamilyLookupRow {
   token_family_id: string;
+}
+
+function deriveFamilyLockKeys(tokenFamilyId: string): [number, number] {
+  const digest = createHash('sha256').update(tokenFamilyId, 'utf8').digest();
+  return [digest.readInt32BE(0), digest.readInt32BE(4)];
+}
+
+/**
+ * Acquires a common transaction-scoped PostgreSQL advisory lock for the session's
+ * token family before locking or mutating any rows in `user_sessions`.
+ * Serializes ancestor replay, descendant rotation, and logout across the entire family.
+ */
+async function acquireFamilyLockByTokenHash(
+  tx: Prisma.TransactionClient,
+  refreshTokenHash: string,
+): Promise<string | null> {
+  const rows = await tx.$queryRaw<FamilyLookupRow[]>`
+    SELECT token_family_id
+    FROM user_sessions
+    WHERE refresh_token_hash = ${refreshTokenHash}
+  `;
+
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+
+  const [keyHigh, keyLow] = deriveFamilyLockKeys(row.token_family_id);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${keyHigh}::int4, ${keyLow}::int4)`;
+  return row.token_family_id;
+}
+
+async function revokeActiveFamilyRows(
+  tx: Prisma.TransactionClient,
+  tokenFamilyId: string,
+  now: Date,
+): Promise<number> {
+  const updated = await tx.userSession.updateMany({
+    where: {
+      tokenFamilyId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: now,
+    },
+  });
+  return updated.count;
 }
 
 function mapSessionRecord(session: {
@@ -99,6 +147,11 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async rotateSession(input: RotateSessionInput): Promise<RotateSessionResult> {
     return this.client.$transaction(async (tx) => {
+      const familyId = await acquireFamilyLockByTokenHash(tx, input.presentedTokenHash);
+      if (!familyId) {
+        return { outcome: 'not_found' };
+      }
+
       const lockedRows = await tx.$queryRaw<LockedSessionRow[]>`
         SELECT id, user_id, token_family_id, parent_session_id, expires_at, revoked_at
         FROM user_sessions
@@ -118,15 +171,7 @@ export class PrismaSessionRepository implements SessionRepository {
         });
 
         if (child) {
-          await tx.userSession.updateMany({
-            where: {
-              tokenFamilyId: locked.token_family_id,
-              revokedAt: null,
-            },
-            data: {
-              revokedAt: input.now,
-            },
-          });
+          await revokeActiveFamilyRows(tx, locked.token_family_id, input.now);
 
           return {
             outcome: 'replayed',
@@ -188,6 +233,11 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async revokeFamilyIfReplayed(refreshTokenHash: string, now: Date): Promise<ReplayCheckResult> {
     return this.client.$transaction(async (tx) => {
+      const familyId = await acquireFamilyLockByTokenHash(tx, refreshTokenHash);
+      if (!familyId) {
+        return { outcome: 'not_found' };
+      }
+
       const lockedRows = await tx.$queryRaw<LockedSessionRow[]>`
         SELECT id, user_id, token_family_id, parent_session_id, expires_at, revoked_at
         FROM user_sessions
@@ -206,15 +256,7 @@ export class PrismaSessionRepository implements SessionRepository {
       });
 
       if (child) {
-        await tx.userSession.updateMany({
-          where: {
-            tokenFamilyId: locked.token_family_id,
-            revokedAt: null,
-          },
-          data: {
-            revokedAt: now,
-          },
-        });
+        await revokeActiveFamilyRows(tx, locked.token_family_id, now);
 
         return {
           outcome: 'replayed',
@@ -228,31 +270,16 @@ export class PrismaSessionRepository implements SessionRepository {
 
   async revokeFamilyByTokenHash(refreshTokenHash: string, now: Date): Promise<RevokeFamilyResult> {
     return this.client.$transaction(async (tx) => {
-      const lockedRows = await tx.$queryRaw<LockedFamilyRow[]>`
-        SELECT token_family_id
-        FROM user_sessions
-        WHERE refresh_token_hash = ${refreshTokenHash}
-        FOR UPDATE
-      `;
-
-      const locked = lockedRows[0];
-      if (!locked) {
+      const familyId = await acquireFamilyLockByTokenHash(tx, refreshTokenHash);
+      if (!familyId) {
         return { revokedCount: 0, tokenFamilyId: null };
       }
 
-      const updated = await tx.userSession.updateMany({
-        where: {
-          tokenFamilyId: locked.token_family_id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: now,
-        },
-      });
+      const revokedCount = await revokeActiveFamilyRows(tx, familyId, now);
 
       return {
-        revokedCount: updated.count,
-        tokenFamilyId: locked.token_family_id,
+        revokedCount,
+        tokenFamilyId: familyId,
       };
     });
   }

@@ -217,4 +217,152 @@ describe('PrismaSessionRepository', () => {
       });
     }
   });
+
+  it('serializes ancestor replay and logout against concurrent descendant rotation in PostgreSQL', async () => {
+    if (!process.env['DATABASE_URL']) {
+      return;
+    }
+
+    const prisma = getPrismaClient();
+    const userRepo = new PrismaUserRepository(prisma);
+    const sessionRepo = new PrismaSessionRepository(prisma);
+    const refreshTokenService = new CryptoRefreshTokenService();
+    const testEmail = `test.ancestor.race.${Date.now()}.${Math.random().toString(36).slice(2, 6)}@example.com`;
+
+    try {
+      const user = await userRepo.create({
+        displayName: 'Ancestor Replay Race User',
+        email: testEmail,
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890',
+        status: UserStatus.ACTIVE,
+      });
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerifiedAt: new Date('2026-11-26T08:00:00Z') },
+      });
+
+      const baseTime = new Date('2026-11-26T10:00:00Z');
+      const familyExpiry = new Date(baseTime.getTime() + 30 * 86_400_000);
+      const unrelatedFamilyId = randomUUID();
+      const unrelatedHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+      const unrelatedSession = await sessionRepo.create({
+        userId: user.id,
+        tokenFamilyId: unrelatedFamilyId,
+        refreshTokenHash: unrelatedHash,
+        parentSessionId: null,
+        expiresAt: familyExpiry,
+      });
+
+      // Repeat multiple concurrent iterations to exercise both lock acquisition orders
+      for (let i = 0; i < 5; i++) {
+        const familyId = randomUUID();
+        const rootHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        await sessionRepo.create({
+          userId: user.id,
+          tokenFamilyId: familyId,
+          refreshTokenHash: rootHash,
+          parentSessionId: null,
+          expiresAt: familyExpiry,
+        });
+
+        const childHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        const rotateToChild = await sessionRepo.rotateSession({
+          presentedTokenHash: rootHash,
+          newSessionId: randomUUID(),
+          newRefreshTokenHash: childHash,
+          now: new Date(baseTime.getTime() + 1000),
+        });
+        expect(rotateToChild.outcome).toBe('rotated');
+
+        const grandchildHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        const raceNow = new Date(baseTime.getTime() + 5000);
+
+        const [descendantResult, ancestorReplayResult] = await Promise.all([
+          sessionRepo.rotateSession({
+            presentedTokenHash: childHash,
+            newSessionId: randomUUID(),
+            newRefreshTokenHash: grandchildHash,
+            now: raceNow,
+          }),
+          sessionRepo.revokeFamilyIfReplayed(rootHash, raceNow),
+        ]);
+
+        expect(ancestorReplayResult).toEqual({ outcome: 'replayed', tokenFamilyId: familyId });
+        expect(['rotated', 'revoked']).toContain(descendantResult.outcome);
+
+        // No active session (including any newly inserted grandchild) may remain in the family
+        const activeRows = await prisma.userSession.findMany({
+          where: { tokenFamilyId: familyId, revokedAt: null },
+        });
+        expect(activeRows).toHaveLength(0);
+
+        const grandchildFollowup = await sessionRepo.rotateSession({
+          presentedTokenHash: grandchildHash,
+          newSessionId: randomUUID(),
+          newRefreshTokenHash: refreshTokenService.hashToken(refreshTokenService.generateToken()),
+          now: new Date(raceNow.getTime() + 1000),
+        });
+        expect(['not_found', 'revoked']).toContain(grandchildFollowup.outcome);
+      }
+
+      // Also verify logout using an ancestor token racing against descendant rotation leaves zero active rows
+      for (let i = 0; i < 5; i++) {
+        const logoutFamilyId = randomUUID();
+        const rootHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        await sessionRepo.create({
+          userId: user.id,
+          tokenFamilyId: logoutFamilyId,
+          refreshTokenHash: rootHash,
+          parentSessionId: null,
+          expiresAt: familyExpiry,
+        });
+
+        const childHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        await sessionRepo.rotateSession({
+          presentedTokenHash: rootHash,
+          newSessionId: randomUUID(),
+          newRefreshTokenHash: childHash,
+          now: new Date(baseTime.getTime() + 1000),
+        });
+
+        const grandchildHash = refreshTokenService.hashToken(refreshTokenService.generateToken());
+        const raceNow = new Date(baseTime.getTime() + 5000);
+        const [descendantResult, logoutResult] = await Promise.all([
+          sessionRepo.rotateSession({
+            presentedTokenHash: childHash,
+            newSessionId: randomUUID(),
+            newRefreshTokenHash: grandchildHash,
+            now: raceNow,
+          }),
+          sessionRepo.revokeFamilyByTokenHash(rootHash, raceNow),
+        ]);
+
+        expect(logoutResult.tokenFamilyId).toBe(logoutFamilyId);
+        expect(['rotated', 'revoked']).toContain(descendantResult.outcome);
+
+        const activeRows = await prisma.userSession.findMany({
+          where: { tokenFamilyId: logoutFamilyId, revokedAt: null },
+        });
+        expect(activeRows).toHaveLength(0);
+
+        const grandchildFollowup = await sessionRepo.rotateSession({
+          presentedTokenHash: grandchildHash,
+          newSessionId: randomUUID(),
+          newRefreshTokenHash: refreshTokenService.hashToken(refreshTokenService.generateToken()),
+          now: new Date(raceNow.getTime() + 1000),
+        });
+        expect(['not_found', 'revoked']).toContain(grandchildFollowup.outcome);
+      }
+
+      // Unrelated family must remain untouched and active
+      const persistedUnrelated = await prisma.userSession.findUnique({
+        where: { id: unrelatedSession.id },
+      });
+      expect(persistedUnrelated?.revokedAt).toBeNull();
+    } finally {
+      await prisma.user.deleteMany({
+        where: { email: testEmail },
+      });
+    }
+  });
 });
