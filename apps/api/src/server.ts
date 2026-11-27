@@ -20,6 +20,7 @@ import {
   PrismaEmployerAccessRepository,
   PrismaPermissionRepository,
 } from './modules/authorization/index.js';
+import { PrismaEmployerAccountRepository } from './modules/employer-accounts/index.js';
 
 // ── Environment Validation (Startup Boundary) ────────────────────────────────
 let config: ApiConfig;
@@ -54,6 +55,7 @@ const accessTokenService = new JoseAccessTokenService({
 const sessionRepository = new PrismaSessionRepository();
 const permissionRepository = new PrismaPermissionRepository();
 const employerAccessRepository = new PrismaEmployerAccessRepository();
+const employerAccountRepository = new PrismaEmployerAccountRepository();
 const passwordResetOutboxRepository = new PrismaPasswordResetOutboxRepository();
 const passwordResetOutboxDispatcher = new PasswordResetOutboxDispatcher({
   outboxRepository: passwordResetOutboxRepository,
@@ -103,6 +105,9 @@ const app = createApp({
     sessionRepository,
     permissionRepository,
     employerAccessRepository,
+  },
+  employerAccounts: {
+    employerAccountRepository,
   },
 });
 const server = http.createServer(app);

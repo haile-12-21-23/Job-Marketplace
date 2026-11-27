@@ -4,6 +4,7 @@ import { createV1Router, v1Router } from './v1/index.js';
 import { createHealthRouter } from './health.js';
 import { checkDatabaseReadiness } from '../infrastructure/database/prisma.js';
 import type { AuthorizationContext, AuthorizationOptions } from '../modules/authorization/index.js';
+import type { EmployerAccountsRouterOptions } from '../modules/employer-accounts/index.js';
 import type { IdentityRouterOptions } from '../modules/identity/index.js';
 
 export interface RootRouterOptions {
@@ -11,6 +12,7 @@ export interface RootRouterOptions {
   corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
   authorization?: AuthorizationOptions | undefined;
+  employerAccounts?: Omit<EmployerAccountsRouterOptions, 'authorization'> | undefined;
   onMountV1Routes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
@@ -42,6 +44,7 @@ export function createRootRouter(options?: RootRouterOptions): Router {
     options?.identity !== undefined ||
     options?.corsOrigins !== undefined ||
     options?.authorization !== undefined ||
+    options?.employerAccounts !== undefined ||
     options?.onMountV1Routes !== undefined;
 
   rootRouter.use(
@@ -51,6 +54,7 @@ export function createRootRouter(options?: RootRouterOptions): Router {
           corsOrigins: options?.corsOrigins,
           identity: options?.identity,
           authorization: options?.authorization,
+          employerAccounts: options?.employerAccounts,
           onMountRoutes: options?.onMountV1Routes,
         })
       : v1Router,

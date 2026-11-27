@@ -6,12 +6,17 @@ import {
   type AuthorizationContext,
   type AuthorizationOptions,
 } from '../../modules/authorization/index.js';
+import {
+  createEmployerAccountsRouter,
+  type EmployerAccountsRouterOptions,
+} from '../../modules/employer-accounts/index.js';
 import { createIdentityRouter, type IdentityRouterOptions } from '../../modules/identity/index.js';
 
 export interface V1RouterOptions {
   corsOrigins?: ReadonlyArray<string> | undefined;
   identity?: IdentityRouterOptions | undefined;
   authorization?: AuthorizationOptions | undefined;
+  employerAccounts?: Omit<EmployerAccountsRouterOptions, 'authorization'> | undefined;
   onMountRoutes?: ((router: Router, authorization: AuthorizationContext) => void) | undefined;
 }
 
@@ -57,6 +62,14 @@ export function createV1Router(options?: V1RouterOptions): Router {
       : undefined;
 
   router.use('/auth', createIdentityRouter(identityOptions));
+
+  router.use(
+    '/employer-accounts',
+    createEmployerAccountsRouter({
+      authorization,
+      employerAccountRepository: options?.employerAccounts?.employerAccountRepository,
+    }),
+  );
 
   if (options?.onMountRoutes) {
     options.onMountRoutes(router, authorization);
