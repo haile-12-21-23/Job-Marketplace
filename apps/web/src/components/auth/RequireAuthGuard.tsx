@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { useAppSelector } from '../../app/hooks.js';
-import { selectIsAuthenticated } from '../../app/auth-slice.js';
+import { useAppDispatch, useAppSelector } from '../../app/hooks.js';
+import {
+  clearAuthSession,
+  isAuthSessionExpired,
+  selectIsAuthenticated,
+} from '../../app/auth-slice.js';
 
 export interface RequireAuthGuardProps {
   children: React.ReactNode;
@@ -17,8 +21,36 @@ export interface RequireAuthGuardProps {
  * and redirects to `/login`.
  */
 export default function RequireAuthGuard({ children }: RequireAuthGuardProps): React.JSX.Element {
+  const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const hasStaleSession = useAppSelector(
+    (state) => state.auth.accessToken !== null && isAuthSessionExpired(state.auth),
+  );
+  const expiresAt = useAppSelector((state) => state.auth.expiresAt);
   const location = useLocation();
+
+  useEffect(() => {
+    if (hasStaleSession) {
+      dispatch(clearAuthSession());
+      return;
+    }
+
+    if (!isAuthenticated || expiresAt === null) {
+      return;
+    }
+
+    const remainingMs = expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      dispatch(clearAuthSession());
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      dispatch(clearAuthSession());
+    }, remainingMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [dispatch, hasStaleSession, isAuthenticated, expiresAt]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;

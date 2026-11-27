@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { routes } from './router.js';
 import { AppProviders } from './providers.js';
 import { createAppStore } from './store.js';
-import { setAuthSession } from './auth-slice.js';
+import { selectIsAuthenticated, setAuthSession } from './auth-slice.js';
 
 describe('React Router configuration and routes', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -24,6 +24,7 @@ describe('React Router configuration and routes', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
@@ -160,5 +161,83 @@ describe('React Router configuration and routes', () => {
     ).toBeDefined();
     expect(screen.getByLabelText(/email address/i)).toBeDefined();
     expect(screen.getByRole('button', { name: 'Send Verification Email' })).toBeDefined();
+  });
+
+  it('redirects "/app" to "/login" and clears in-memory auth state when the access token has expired', async () => {
+    const expiredAt = Date.now() - 1000;
+    const store = createAppStore({
+      auth: {
+        accessToken: 'stale-expired-jwt',
+        expiresIn: 900,
+        expiresAt: expiredAt,
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          displayName: 'Abebe',
+          email: 'abebe@example.com',
+        },
+      },
+    });
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: ['/app'],
+    });
+
+    render(
+      <AppProviders storeInstance={store}>
+        <RouterProvider router={memoryRouter} />
+      </AppProviders>,
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeDefined();
+    expect(selectIsAuthenticated(store.getState())).toBe(false);
+    expect(store.getState().auth).toEqual({
+      accessToken: null,
+      expiresIn: null,
+      expiresAt: null,
+      user: null,
+    });
+  });
+
+  it('redirects active "/app" session to "/login" and clears auth state once the token expires', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-27T09:00:00.000Z'));
+
+    const store = createAppStore();
+    store.dispatch(
+      setAuthSession({
+        accessToken: 'active-jwt',
+        expiresIn: 900,
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          displayName: 'Abebe',
+          email: 'abebe@example.com',
+        },
+      }),
+    );
+
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: ['/app'],
+    });
+
+    render(
+      <AppProviders storeInstance={store}>
+        <RouterProvider router={memoryRouter} />
+      </AppProviders>,
+    );
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Candidate & Employer Workspace' }),
+    ).toBeDefined();
+
+    act(() => {
+      vi.advanceTimersByTime(900_000);
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in' })).toBeDefined();
+    expect(store.getState().auth).toEqual({
+      accessToken: null,
+      expiresIn: null,
+      expiresAt: null,
+      user: null,
+    });
   });
 });

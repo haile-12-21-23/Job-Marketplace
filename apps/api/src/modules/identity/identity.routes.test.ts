@@ -565,6 +565,8 @@ describe('Identity Auth Routes', () => {
 
       expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
       expect(res.headers['access-control-allow-credentials']).toBe('true');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['pragma']).toBe('no-cache');
 
       expect(res.body).toEqual({
         data: {
@@ -639,6 +641,9 @@ describe('Identity Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({ email: validPayload.email, password: validPayload.password })
         .expect(200);
+
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['pragma']).toBe('no-cache');
 
       const cookieHeader = Array.isArray(res.headers['set-cookie'])
         ? res.headers['set-cookie'][0]!

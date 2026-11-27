@@ -5,7 +5,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import LoginPage from './LoginPage.js';
 import { AppProviders } from '../app/providers.js';
 import { createAppStore } from '../app/store.js';
-import { selectAccessToken, selectCurrentUser } from '../app/auth-slice.js';
+import {
+  selectAccessToken,
+  selectCurrentUser,
+  selectExpiresAt,
+  selectIsAuthenticated,
+} from '../app/auth-slice.js';
 
 describe('LoginPage', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -111,6 +116,10 @@ describe('LoginPage', () => {
     const state = store.getState();
     expect(selectAccessToken(state)).toBe('jwt-memory-token-abc');
     expect(selectCurrentUser(state)?.email).toBe('abebe@example.com');
+    expect(selectIsAuthenticated(state)).toBe(true);
+    const expiresAt = selectExpiresAt(state);
+    expect(typeof expiresAt).toBe('number');
+    expect(expiresAt!).toBeGreaterThan(Date.now());
 
     // Never persisted in browser storage
     expect(localStorage.length).toBe(0);

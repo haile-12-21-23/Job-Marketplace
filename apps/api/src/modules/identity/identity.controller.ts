@@ -57,6 +57,10 @@ export class IdentityController {
       const result = await this.loginUseCase.execute(req.body as LoginRequest);
 
       res
+        .set({
+          'Cache-Control': 'no-store',
+          Pragma: 'no-cache',
+        })
         .cookie(this.refreshCookieSpec.name, result.refreshToken, this.refreshCookieSpec.options)
         .status(200)
         .json({ data: result.response });
